@@ -4,6 +4,30 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>小说阅读器</title>
+  <script>
+    (() => {
+      try {
+        const savedFontSize = Number(localStorage.getItem("reader.fontsize"));
+
+        if (
+          Number.isInteger(savedFontSize) &&
+          savedFontSize >= 14 &&
+          savedFontSize <= 28
+        ) {
+          document.documentElement.style.setProperty(
+            "--font-size",
+            `${savedFontSize}px`
+          );
+        }
+
+        if (localStorage.getItem("reader.theme") === "dark") {
+          document.documentElement.classList.add("dark");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    })();
+  </script>
   <style>
     :root {
       --font-size: 18px;
@@ -12,7 +36,6 @@
     }
 
     :root.dark {
-      --font-size: 18px;
       --bg: #181a1c;
       --fg: #e8e3d8;
     }
@@ -29,12 +52,17 @@
     }
 
     .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: center;
       gap: 12px 16px;
       padding: 16px;
+      background: var(--bg);
+      border-bottom: 1px solid rgba(128, 128, 128, 0.2);
     }
 
     .font-size-control {
@@ -100,10 +128,36 @@
       overflow-wrap: anywhere;
     }
 
+    :root.dark .reading-content {
+      box-shadow: none;
+    }
+
     .reading-content:empty::before {
       content: "请选择一个 TXT 文件开始阅读";
       color: var(--fg);
       opacity: 0.55;
+    }
+
+    .reading-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      z-index: 10;
+      padding: 8px 16px;
+      border-radius: 999px;
+      color: var(--bg);
+      background: var(--fg);
+      font-size: 14px;
+      line-height: 1.5;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 8px);
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .reading-toast.show {
+      opacity: 0.92;
+      transform: translate(-50%, 0);
     }
 
     @media (max-width: 600px) {
@@ -124,7 +178,7 @@
     <input
       id="file-input"
       type="file"
-      accept=".txt,text/plain"
+      accept=".txt,.md,text/plain"
       hidden
     >
     <button id="select-file" class="file-button" type="button">
@@ -148,6 +202,12 @@
   </div>
 
   <div id="reading-content" class="reading-content"></div>
+  <div
+    id="reading-toast"
+    class="reading-toast"
+    role="status"
+    aria-live="polite"
+  ></div>
 
   <script>
     const fileInput = document.getElementById("file-input");
@@ -155,13 +215,170 @@
     const readingContent = document.getElementById("reading-content");
     const fontSizeInput = document.getElementById("font-size");
     const themeToggle = document.getElementById("theme-toggle");
+    const readingToast = document.getElementById("reading-toast");
     const root = document.documentElement;
+    let currentBookKey = null;
+    let progressSaveTimer = null;
+    let toastTimer = null;
+
+    function saveSetting(key, value) {
+      try {
+        localStorage.setItem(key, value);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    function getSavedFontSize() {
+      try {
+        const value = Number(localStorage.getItem("reader.fontsize"));
+        return Number.isInteger(value) && value >= 14 && value <= 28
+          ? value
+          : null;
+      } catch (error) {
+        console.error(error);
+        return null;
+      }
+    }
+
+    const savedFontSize = getSavedFontSize();
+
+    if (savedFontSize !== null) {
+      fontSizeInput.value = String(savedFontSize);
+    }
+
+    function getScrollElement() {
+      return document.scrollingElement || document.documentElement;
+    }
+
+    function getProgressKey(bookKey) {
+      return `reader.progress:${bookKey}`;
+    }
+
+    function getSavedProgress(bookKey) {
+      try {
+        const savedValue = localStorage.getItem(getProgressKey(bookKey));
+
+        if (savedValue === null) {
+          return null;
+        }
+
+        const progress = Number(savedValue);
+        return Number.isFinite(progress) && progress >= 0 && progress <= 1
+          ? progress
+          : null;
+      } catch (error) {
+        console.error(error);
+        return null;
+      }
+    }
+
+    function showReadingToast() {
+      readingToast.textContent = "已回到上次阅读位置";
+      readingToast.classList.add("show");
+
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        readingToast.classList.remove("show");
+      }, 2000);
+    }
+
+    function restoreReadingProgress(bookKey) {
+      const savedProgress = getSavedProgress(bookKey);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const scrollElement = getScrollElement();
+          const maxScroll = scrollElement.scrollHeight - window.innerHeight;
+          const progress = savedProgress ?? 0;
+
+          scrollElement.scrollTop = maxScroll > 0 ? progress * maxScroll : 0;
+
+          if (savedProgress !== null && savedProgress > 0) {
+            showReadingToast();
+          }
+        });
+      });
+    }
+
+    function saveReadingProgress() {
+      if (currentBookKey === null) {
+        return;
+      }
+
+      const scrollElement = getScrollElement();
+      const maxScroll = scrollElement.scrollHeight - window.innerHeight;
+      const progress =
+        maxScroll > 0 ? scrollElement.scrollTop / maxScroll : 0;
+
+      saveSetting(getProgressKey(currentBookKey), String(progress));
+    }
+
+    function detectUtf16Encoding(bytes) {
+      const sampleLength = Math.min(bytes.length, 4096);
+      let evenZeros = 0;
+      let oddZeros = 0;
+      let pairs = 0;
+
+      for (let index = 0; index + 1 < sampleLength; index += 2) {
+        if (bytes[index] === 0) {
+          evenZeros++;
+        }
+
+        if (bytes[index + 1] === 0) {
+          oddZeros++;
+        }
+
+        pairs++;
+      }
+
+      if (pairs < 4) {
+        return null;
+      }
+
+      const evenRatio = evenZeros / pairs;
+      const oddRatio = oddZeros / pairs;
+
+      if (oddRatio >= 0.2 && oddRatio > evenRatio * 3) {
+        return "utf-16le";
+      }
+
+      if (evenRatio >= 0.2 && evenRatio > oddRatio * 3) {
+        return "utf-16be";
+      }
+
+      return null;
+    }
 
     function decodeText(buffer) {
+      const bytes = new Uint8Array(buffer);
+
+      if (
+        bytes[0] === 0xef &&
+        bytes[1] === 0xbb &&
+        bytes[2] === 0xbf
+      ) {
+        return new TextDecoder("utf-8").decode(bytes.subarray(3));
+      }
+
+      if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+        return new TextDecoder("utf-16le").decode(bytes.subarray(2));
+      }
+
+      if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+        return new TextDecoder("utf-16be").decode(bytes.subarray(2));
+      }
+
+      const utf16Encoding = detectUtf16Encoding(bytes);
+
+      if (utf16Encoding !== null) {
+        return new TextDecoder(utf16Encoding).decode(bytes);
+      }
+
       try {
-        return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+        return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       } catch {
-        return new TextDecoder("gbk").decode(buffer);
+        return new TextDecoder("gbk").decode(bytes);
       }
     }
 
@@ -171,11 +388,24 @@
 
     fontSizeInput.addEventListener("input", () => {
       root.style.setProperty("--font-size", `${fontSizeInput.value}px`);
+      saveSetting("reader.fontsize", fontSizeInput.value);
     });
 
     themeToggle.addEventListener("click", () => {
-      root.classList.toggle("dark");
+      const isDark = root.classList.toggle("dark");
+      saveSetting("reader.theme", isDark ? "dark" : "light");
     });
+
+    window.addEventListener(
+      "scroll",
+      () => {
+        clearTimeout(progressSaveTimer);
+        progressSaveTimer = setTimeout(() => {
+          saveReadingProgress();
+        }, 200);
+      },
+      { passive: true }
+    );
 
     fileInput.addEventListener("change", async () => {
       const file = fileInput.files[0];
@@ -184,10 +414,18 @@
         return;
       }
 
+      const bookKey = `${file.name}::${file.size}`;
+
+      clearTimeout(progressSaveTimer);
+      saveReadingProgress();
+      currentBookKey = null;
+
       try {
         const buffer = await file.arrayBuffer();
         const text = decodeText(buffer);
         readingContent.textContent = text;
+        currentBookKey = bookKey;
+        restoreReadingProgress(bookKey);
       } catch (error) {
         readingContent.textContent = "文件读取失败，请重新选择。";
         console.error(error);
