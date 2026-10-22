@@ -7,7 +7,7 @@
   <script>
     (() => {
       try {
-        const savedFontSize = Number(localStorage.getItem("reader.fontsize"));
+        const savedFontSize = Number(localStorage.getItem("reader.fontSize"));
 
         if (
           Number.isInteger(savedFontSize) &&
@@ -160,6 +160,23 @@
       transform: translate(-50%, 0);
     }
 
+    .storage-usage {
+      position: fixed;
+      right: 12px;
+      bottom: max(8px, env(safe-area-inset-bottom));
+      z-index: 8;
+      padding: 3px 6px;
+      border-radius: 4px;
+      color: var(--fg);
+      background: var(--bg);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.4;
+      white-space: nowrap;
+      opacity: 0.72;
+      pointer-events: none;
+    }
+
     @media (max-width: 600px) {
       .toolbar {
         padding: 12px;
@@ -208,6 +225,12 @@
     role="status"
     aria-live="polite"
   ></div>
+  <div
+    id="storage-usage"
+    class="storage-usage"
+    aria-live="polite"
+    hidden
+  ></div>
 
   <script>
     const fileInput = document.getElementById("file-input");
@@ -216,10 +239,94 @@
     const fontSizeInput = document.getElementById("font-size");
     const themeToggle = document.getElementById("theme-toggle");
     const readingToast = document.getElementById("reading-toast");
+    const storageUsage = document.getElementById("storage-usage");
     const root = document.documentElement;
     let currentBookKey = null;
     let progressSaveTimer = null;
     let toastTimer = null;
+    let loadSeq = 0;
+
+    const DB_NAME = "reader";
+    const DB_VERSION = 1;
+    const BOOK_STORE = "books";
+    const LAST_BOOK_KEY = "reader.lastBookKey";
+
+    // 不同域名 = 不同的 IndexedDB 数据库。
+    let dbPromise = null;
+
+    function openDB() {
+      if (dbPromise !== null) {
+        return dbPromise;
+      }
+
+      dbPromise = new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onupgradeneeded = () => {
+          const db = request.result;
+
+          if (!db.objectStoreNames.contains(BOOK_STORE)) {
+            db.createObjectStore(BOOK_STORE);
+          }
+        };
+
+        request.onsuccess = () => {
+          const db = request.result;
+
+          db.onversionchange = () => {
+            db.close();
+            dbPromise = null;
+          };
+
+          resolve(db);
+        };
+
+        request.onerror = () => {
+          dbPromise = null;
+          reject(request.error);
+        };
+      });
+
+      return dbPromise;
+    }
+
+    async function putBook(bookKey, buffer) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(BOOK_STORE, "readwrite");
+
+        transaction.objectStore(BOOK_STORE).put(buffer, bookKey);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    }
+
+    async function getBook(bookKey) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(BOOK_STORE, "readonly");
+        const request = transaction.objectStore(BOOK_STORE).get(bookKey);
+
+        request.onsuccess = () => resolve(request.result ?? null);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    async function deleteBook(bookKey) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(BOOK_STORE, "readwrite");
+
+        transaction.objectStore(BOOK_STORE).delete(bookKey);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    }
 
     function saveSetting(key, value) {
       try {
@@ -229,9 +336,44 @@
       }
     }
 
+    function removeSetting(key) {
+      try {
+        localStorage.removeItem(key);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    function showLoadingState() {
+      readingContent.setAttribute("aria-busy", "true");
+      readingContent.textContent = "正在载入……";
+    }
+
+    function clearLoadingState() {
+      readingContent.removeAttribute("aria-busy");
+    }
+
+    async function updateStorageUsage() {
+      if (!navigator.storage?.estimate) {
+        return;
+      }
+
+      try {
+        const { usage, quota } = await navigator.storage.estimate();
+        const usedMB = (Number(usage) || 0) / (1024 * 1024);
+        const quotaGB = (Number(quota) || 0) / (1024 * 1024 * 1024);
+
+        storageUsage.textContent =
+          `已用 ${usedMB.toFixed(2)} MB · 上限 ${quotaGB.toFixed(2)}GB`;
+        storageUsage.hidden = false;
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
     function getSavedFontSize() {
       try {
-        const value = Number(localStorage.getItem("reader.fontsize"));
+        const value = Number(localStorage.getItem("reader.fontSize"));
         return Number.isInteger(value) && value >= 14 && value <= 28
           ? value
           : null;
@@ -283,11 +425,15 @@
       }, 2000);
     }
 
-    function restoreReadingProgress(bookKey) {
+    function restoreReadingProgress(bookKey, seq) {
       const savedProgress = getSavedProgress(bookKey);
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+          if (seq !== loadSeq) {
+            return;
+          }
+
           const scrollElement = getScrollElement();
           const maxScroll = scrollElement.scrollHeight - window.innerHeight;
           const progress = savedProgress ?? 0;
@@ -382,13 +528,60 @@
       }
     }
 
+    async function openLastBook() {
+      let lastBookKey = null;
+
+      try {
+        lastBookKey = localStorage.getItem(LAST_BOOK_KEY);
+      } catch (error) {
+        console.error(error);
+      }
+
+      if (!lastBookKey) {
+        return;
+      }
+
+      const seq = ++loadSeq;
+      showLoadingState();
+
+      try {
+        const buffer = await getBook(lastBookKey);
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        if (buffer === null) {
+          removeSetting(LAST_BOOK_KEY);
+          readingContent.textContent = "";
+          return;
+        }
+
+        const text = decodeText(buffer);
+        readingContent.textContent = text;
+        currentBookKey = lastBookKey;
+        restoreReadingProgress(lastBookKey, seq);
+      } catch (error) {
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        readingContent.textContent = "载入失败，请重新选择文件。";
+        console.error(error);
+      } finally {
+        if (seq === loadSeq) {
+          clearLoadingState();
+        }
+      }
+    }
+
     selectButton.addEventListener("click", () => {
       fileInput.click();
     });
 
     fontSizeInput.addEventListener("input", () => {
       root.style.setProperty("--font-size", `${fontSizeInput.value}px`);
-      saveSetting("reader.fontsize", fontSizeInput.value);
+      saveSetting("reader.fontSize", fontSizeInput.value);
     });
 
     themeToggle.addEventListener("click", () => {
@@ -414,25 +607,50 @@
         return;
       }
 
+      const seq = ++loadSeq;
       const bookKey = `${file.name}::${file.size}`;
 
       clearTimeout(progressSaveTimer);
       saveReadingProgress();
       currentBookKey = null;
+      showLoadingState();
 
       try {
         const buffer = await file.arrayBuffer();
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        await putBook(bookKey, buffer);
+        updateStorageUsage();
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
         const text = decodeText(buffer);
         readingContent.textContent = text;
         currentBookKey = bookKey;
-        restoreReadingProgress(bookKey);
+        saveSetting(LAST_BOOK_KEY, bookKey);
+        restoreReadingProgress(bookKey, seq);
       } catch (error) {
-        readingContent.textContent = "文件读取失败，请重新选择。";
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        readingContent.textContent = "文件读取或存储失败，请重新选择。";
         console.error(error);
       } finally {
-        fileInput.value = "";
+        if (seq === loadSeq) {
+          clearLoadingState();
+          fileInput.value = "";
+        }
       }
     });
+
+    openLastBook();
+    updateStorageUsage();
   </script>
 </body>
 </html>
