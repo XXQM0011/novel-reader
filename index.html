@@ -138,6 +138,89 @@
       opacity: 0.55;
     }
 
+    .loading {
+      max-width: 720px;
+      margin: 20px auto 0;
+      padding: 0 32px;
+      color: var(--fg);
+      font-size: 13px;
+      line-height: 1.8;
+      text-align: center;
+      opacity: 0.55;
+    }
+
+    #loading:not([hidden]) + #reading-content:empty::before {
+      content: none;
+    }
+
+    .shelf {
+      max-width: 720px;
+      margin: 20px auto 0;
+      padding: 0 32px;
+    }
+
+    .shelf-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .shelf-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 1px solid rgba(128, 128, 128, 0.2);
+      border-radius: 8px;
+      color: var(--fg);
+      background: var(--bg);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .shelf-item:focus-visible {
+      outline: 3px solid rgba(63, 111, 94, 0.35);
+      outline-offset: 2px;
+    }
+
+    .shelf-title {
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      font-size: 15px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .shelf-chars {
+      flex: none;
+      font-size: 12px;
+      white-space: nowrap;
+      opacity: 0.55;
+    }
+
+    .shelf-progress {
+      flex: none;
+      margin-left: 8px;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .shelf-empty {
+      margin: 0;
+      padding: 16px 0;
+      color: var(--fg);
+      font-size: 14px;
+      line-height: 1.8;
+      text-align: center;
+      opacity: 0.55;
+    }
+
     .reading-toast {
       position: fixed;
       left: 50%;
@@ -187,6 +270,14 @@
         border-radius: 0;
         box-shadow: none;
       }
+
+      .loading {
+        padding: 0 16px;
+      }
+
+      .shelf {
+        padding: 0 16px;
+      }
     }
   </style>
 </head>
@@ -218,6 +309,14 @@
     </button>
   </div>
 
+  <section class="shelf" aria-label="书架">
+    <div id="shelf-list" class="shelf-list"></div>
+    <p id="shelf-empty" class="shelf-empty" hidden>
+      还没有书，点上面导入一本
+    </p>
+  </section>
+
+  <div id="loading" class="loading" hidden>正在打开上次那本书…</div>
   <div id="reading-content" class="reading-content"></div>
   <div
     id="reading-toast"
@@ -240,6 +339,9 @@
     const themeToggle = document.getElementById("theme-toggle");
     const readingToast = document.getElementById("reading-toast");
     const storageUsage = document.getElementById("storage-usage");
+    const loading = document.getElementById("loading");
+    const shelfList = document.getElementById("shelf-list");
+    const shelfEmpty = document.getElementById("shelf-empty");
     const root = document.documentElement;
     let currentBookKey = null;
     let progressSaveTimer = null;
@@ -247,8 +349,9 @@
     let loadSeq = 0;
 
     const DB_NAME = "reader";
-    const DB_VERSION = 1;
+    const DB_VERSION = 2;
     const BOOK_STORE = "books";
+    const META_STORE = "meta";
     const LAST_BOOK_KEY = "reader.lastBookKey";
 
     // 不同域名 = 不同的 IndexedDB 数据库。
@@ -267,6 +370,10 @@
 
           if (!db.objectStoreNames.contains(BOOK_STORE)) {
             db.createObjectStore(BOOK_STORE);
+          }
+
+          if (!db.objectStoreNames.contains(META_STORE)) {
+            db.createObjectStore(META_STORE);
           }
         };
 
@@ -300,6 +407,31 @@
         transaction.oncomplete = () => resolve();
         transaction.onerror = () => reject(transaction.error);
         transaction.onabort = () => reject(transaction.error);
+      });
+    }
+
+    async function putBookMeta(bookKey, meta) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(META_STORE, "readwrite");
+
+        transaction.objectStore(META_STORE).put(meta, bookKey);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    }
+
+    async function getAllBookMeta() {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(META_STORE, "readonly");
+        const request = transaction.objectStore(META_STORE).getAll();
+
+        request.onsuccess = () => resolve(request.result ?? []);
+        request.onerror = () => reject(request.error);
       });
     }
 
@@ -415,6 +547,95 @@
       }
     }
 
+    async function renderShelf() {
+      try {
+        // 书架只对 meta 调用 getAll；绝不能对 books 调用 getAll：
+        // 会把所有正文一次性读进内存，20 本 5MB 的书就是 100MB。
+        const metas = await getAllBookMeta();
+
+        metas.sort(
+          (first, second) =>
+            (Number(second.lastReadAt) || 0) -
+            (Number(first.lastReadAt) || 0)
+        );
+
+        shelfList.replaceChildren();
+        shelfEmpty.hidden = metas.length > 0;
+
+        for (const meta of metas) {
+          // 书名是用户可控内容，必须使用 createElement + textContent，禁止 innerHTML 拼接，避免 XSS。
+          const item = document.createElement("button");
+          const title = document.createElement("span");
+          const chars = document.createElement("span");
+          const progress = document.createElement("span");
+          const savedProgress = getSavedProgress(meta.bookKey) ?? 0;
+          const charCount = Number(meta.chars) || 0;
+
+          item.type = "button";
+          item.className = "shelf-item";
+
+          title.className = "shelf-title";
+          title.textContent = String(meta.name ?? "").replace(/\.txt$/i, "");
+
+          chars.className = "shelf-chars";
+          chars.textContent = `${charCount.toLocaleString("zh-CN")} 字`;
+
+          progress.className = "shelf-progress";
+          progress.textContent = `${Math.round(savedProgress * 100)}%`;
+
+          item.append(title, chars, progress);
+          item.addEventListener("click", () => {
+            openShelfBook(meta.bookKey);
+          });
+          shelfList.append(item);
+        }
+      } catch (error) {
+        shelfList.replaceChildren();
+        shelfEmpty.hidden = false;
+        console.error(error);
+      }
+    }
+
+    async function openShelfBook(bookKey) {
+      const seq = ++loadSeq;
+
+      clearTimeout(progressSaveTimer);
+      saveReadingProgress();
+      currentBookKey = null;
+      loading.hidden = true;
+      showLoadingState();
+
+      try {
+        const buffer = await getBook(bookKey);
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        if (buffer === null) {
+          readingContent.textContent = "";
+          return;
+        }
+
+        const text = decodeText(buffer);
+        readingContent.textContent = text;
+        currentBookKey = bookKey;
+        saveSetting(LAST_BOOK_KEY, bookKey);
+        restoreReadingProgress(bookKey, seq);
+      } catch (error) {
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        readingContent.textContent = "载入失败，请重新选择文件。";
+        console.error(error);
+      } finally {
+        if (seq === loadSeq) {
+          clearLoadingState();
+        }
+      }
+    }
+
     function showReadingToast() {
       readingToast.textContent = "已回到上次阅读位置";
       readingToast.classList.add("show");
@@ -496,6 +717,21 @@
       return null;
     }
 
+    function replacementRatio(text) {
+      let replacements = 0;
+      let characters = 0;
+
+      for (const character of text) {
+        characters++;
+
+        if (character === "\uFFFD") {
+          replacements++;
+        }
+      }
+
+      return characters === 0 ? 0 : replacements / characters;
+    }
+
     function decodeText(buffer) {
       const bytes = new Uint8Array(buffer);
 
@@ -524,8 +760,29 @@
       try {
         return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       } catch {
-        return new TextDecoder("gbk").decode(bytes);
+        // 严格解码失败只说明“不是纯 UTF-8”，不说明“不是 UTF-8”。
       }
+
+      const utf8Text = new TextDecoder("utf-8").decode(bytes);
+
+      if (replacementRatio(utf8Text) < 0.05) {
+        return utf8Text;
+      }
+
+      let bestText = "";
+      let bestRatio = Infinity;
+
+      for (const encoding of ["gbk", "utf-16le", "utf-16be"]) {
+        const text = new TextDecoder(encoding).decode(bytes);
+        const ratio = replacementRatio(text);
+
+        if (ratio < bestRatio) {
+          bestText = text;
+          bestRatio = ratio;
+        }
+      }
+
+      return bestText;
     }
 
     async function openLastBook() {
@@ -542,7 +799,7 @@
       }
 
       const seq = ++loadSeq;
-      showLoadingState();
+      loading.hidden = false;
 
       try {
         const buffer = await getBook(lastBookKey);
@@ -569,9 +826,7 @@
         readingContent.textContent = "载入失败，请重新选择文件。";
         console.error(error);
       } finally {
-        if (seq === loadSeq) {
-          clearLoadingState();
-        }
+        loading.hidden = true;
       }
     }
 
@@ -623,13 +878,30 @@
         }
 
         await putBook(bookKey, buffer);
-        updateStorageUsage();
 
         if (seq !== loadSeq) {
           return;
         }
 
         const text = decodeText(buffer);
+        const now = Date.now();
+        const meta = {
+          bookKey,
+          name: file.name,
+          size: file.size,
+          chars: text.length,
+          addedAt: now,
+          lastReadAt: now,
+        };
+
+        await putBookMeta(bookKey, meta);
+        await renderShelf();
+        updateStorageUsage();
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
         readingContent.textContent = text;
         currentBookKey = bookKey;
         saveSetting(LAST_BOOK_KEY, bookKey);
@@ -649,8 +921,18 @@
       }
     });
 
-    openLastBook();
-    updateStorageUsage();
+    async function initializeReader() {
+      const startingLoadSeq = loadSeq;
+      await renderShelf();
+
+      if (loadSeq === startingLoadSeq) {
+        openLastBook();
+      }
+
+      updateStorageUsage();
+    }
+
+    initializeReader();
   </script>
 </body>
 </html>
