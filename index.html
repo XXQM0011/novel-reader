@@ -51,6 +51,14 @@
       font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
     }
 
+    body[data-view="shelf"] #reading-content {
+      display: none;
+    }
+
+    body[data-view="reader"] #shelf {
+      display: none;
+    }
+
     .toolbar {
       position: sticky;
       top: 0;
@@ -79,7 +87,8 @@
     }
 
     .file-button,
-    .theme-button {
+    .theme-button,
+    .back-button {
       min-height: 44px;
       padding: 10px 24px;
       border: 0;
@@ -98,8 +107,15 @@
       background: var(--fg);
     }
 
+    .back-button {
+      color: var(--fg);
+      background: transparent;
+      border: 1px solid rgba(128, 128, 128, 0.45);
+    }
+
     .file-button:active,
-    .theme-button:active {
+    .theme-button:active,
+    .back-button:active {
       opacity: 0.8;
     }
 
@@ -108,7 +124,8 @@
     }
 
     .file-button:focus-visible,
-    .theme-button:focus-visible {
+    .theme-button:focus-visible,
+    .back-button:focus-visible {
       outline: 3px solid rgba(63, 111, 94, 0.35);
       outline-offset: 3px;
     }
@@ -211,6 +228,25 @@
       white-space: nowrap;
     }
 
+    .shelf-delete {
+      flex: none;
+      min-width: 36px;
+      min-height: 32px;
+      padding: 4px 8px;
+      border: 1px solid rgba(128, 128, 128, 0.4);
+      border-radius: 6px;
+      color: var(--fg);
+      background: transparent;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .shelf-delete:focus-visible {
+      outline: 3px solid rgba(63, 111, 94, 0.35);
+      outline-offset: 2px;
+    }
+
     .shelf-empty {
       margin: 0;
       padding: 16px 0;
@@ -281,7 +317,7 @@
     }
   </style>
 </head>
-<body>
+<body data-view="shelf">
   <div class="toolbar">
     <input
       id="file-input"
@@ -291,6 +327,14 @@
     >
     <button id="select-file" class="file-button" type="button">
       选择文件
+    </button>
+    <button
+      id="back-to-shelf"
+      class="back-button"
+      type="button"
+      hidden
+    >
+      ← 书架
     </button>
     <label class="font-size-control" for="font-size">
       字号
@@ -309,7 +353,7 @@
     </button>
   </div>
 
-  <section class="shelf" aria-label="书架">
+  <section id="shelf" class="shelf" aria-label="书架">
     <div id="shelf-list" class="shelf-list"></div>
     <p id="shelf-empty" class="shelf-empty" hidden>
       还没有书，点上面导入一本
@@ -334,6 +378,7 @@
   <script>
     const fileInput = document.getElementById("file-input");
     const selectButton = document.getElementById("select-file");
+    const backToShelf = document.getElementById("back-to-shelf");
     const readingContent = document.getElementById("reading-content");
     const fontSizeInput = document.getElementById("font-size");
     const themeToggle = document.getElementById("theme-toggle");
@@ -356,6 +401,25 @@
 
     // 不同域名 = 不同的 IndexedDB 数据库。
     let dbPromise = null;
+
+    function showShelfView() {
+      document.body.dataset.view = "shelf";
+      backToShelf.setAttribute("hidden", "");
+    }
+
+    function showReaderView() {
+      const isEnteringReader = document.body.dataset.view !== "reader";
+
+      document.body.dataset.view = "reader";
+      backToShelf.removeAttribute("hidden");
+
+      // 历史栈：
+      // 初始 [shelf] -> 从书架打开书籍 [shelf, reader]
+      // 返回或物理返回键 [shelf]；反向切换只出栈，绝不 push。
+      if (isEnteringReader) {
+        history.pushState({ view: "reader" }, "");
+      }
+    }
 
     function openDB() {
       if (dbPromise !== null) {
@@ -432,6 +496,19 @@
 
         request.onsuccess = () => resolve(request.result ?? []);
         request.onerror = () => reject(request.error);
+      });
+    }
+
+    async function deleteBookMeta(bookKey) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(META_STORE, "readwrite");
+
+        transaction.objectStore(META_STORE).delete(bookKey);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
       });
     }
 
@@ -564,15 +641,17 @@
 
         for (const meta of metas) {
           // 书名是用户可控内容，必须使用 createElement + textContent，禁止 innerHTML 拼接，避免 XSS。
-          const item = document.createElement("button");
+          const item = document.createElement("div");
           const title = document.createElement("span");
           const chars = document.createElement("span");
           const progress = document.createElement("span");
+          const deleteButton = document.createElement("button");
           const savedProgress = getSavedProgress(meta.bookKey) ?? 0;
           const charCount = Number(meta.chars) || 0;
 
-          item.type = "button";
           item.className = "shelf-item";
+          item.tabIndex = 0;
+          item.setAttribute("role", "button");
 
           title.className = "shelf-title";
           title.textContent = String(meta.name ?? "").replace(/\.txt$/i, "");
@@ -583,10 +662,17 @@
           progress.className = "shelf-progress";
           progress.textContent = `${Math.round(savedProgress * 100)}%`;
 
-          item.append(title, chars, progress);
-          item.addEventListener("click", () => {
-            openShelfBook(meta.bookKey);
+          deleteButton.type = "button";
+          deleteButton.className = "shelf-delete";
+          deleteButton.textContent = "删";
+          deleteButton.setAttribute("aria-label", `删除 ${title.textContent}`);
+          deleteButton.addEventListener("click", (event) => {
+            event.stopPropagation();
+            deleteShelfBook(meta.bookKey);
           });
+
+          item.append(title, chars, progress, deleteButton);
+          item.dataset.bookKey = String(meta.bookKey ?? "");
           shelfList.append(item);
         }
       } catch (error) {
@@ -597,15 +683,17 @@
     }
 
     async function openShelfBook(bookKey) {
-      const seq = ++loadSeq;
-
-      clearTimeout(progressSaveTimer);
+      // 切换视图会隐藏正文并改变布局，必须在离开阅读视图前保存当前进度。
       saveReadingProgress();
+      clearTimeout(progressSaveTimer);
+
+      const seq = ++loadSeq;
       currentBookKey = null;
       loading.hidden = true;
       showLoadingState();
 
       try {
+        // 只读取当前这一本正文，不对 books 表执行 getAll。
         const buffer = await getBook(bookKey);
 
         if (seq !== loadSeq) {
@@ -613,14 +701,43 @@
         }
 
         if (buffer === null) {
-          readingContent.textContent = "";
           return;
         }
 
+        currentBookKey = bookKey;
+
         const text = decodeText(buffer);
         readingContent.textContent = text;
-        currentBookKey = bookKey;
         saveSetting(LAST_BOOK_KEY, bookKey);
+
+        const metas = await getAllBookMeta();
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        const existingMeta = metas.find((meta) => meta.bookKey === bookKey);
+
+        if (existingMeta) {
+          await putBookMeta(bookKey, {
+            ...existingMeta,
+            lastReadAt: Date.now(),
+          });
+
+          if (seq !== loadSeq) {
+            return;
+          }
+
+          await renderShelf();
+
+          if (seq !== loadSeq) {
+            return;
+          }
+        }
+
+        // 正文在书架视图中是隐藏的，先切视图再让双层 rAF 计算并恢复滚动位置。
+        showReaderView();
+        window.scrollTo(0, 0);
         restoreReadingProgress(bookKey, seq);
       } catch (error) {
         if (seq !== loadSeq) {
@@ -636,14 +753,115 @@
       }
     }
 
-    function showReadingToast() {
-      readingToast.textContent = "已回到上次阅读位置";
+    async function deleteShelfBook(bookKey) {
+      if (!confirm("删掉这本书？正文和阅读进度都会没。")) {
+        return;
+      }
+
+      try {
+        await deleteBook(bookKey);
+
+        await deleteBookMeta(bookKey);
+
+        localStorage.removeItem(getProgressKey(bookKey));
+
+        if (localStorage.getItem(LAST_BOOK_KEY) === bookKey) {
+          localStorage.removeItem(LAST_BOOK_KEY);
+        }
+      } catch (error) {
+        console.error(error);
+        showToast("删除失败，请稍后重试");
+      } finally {
+        await renderShelf();
+      }
+    }
+
+    // 书架条目由 renderShelf 动态创建，因此统一在列表上使用事件委托。
+    shelfList.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const item = event.target.closest(".shelf-item");
+
+      if (!item) {
+        return;
+      }
+
+      const bookKey = item.dataset.bookKey;
+
+      if (bookKey) {
+        openShelfBook(bookKey);
+      }
+    });
+
+    shelfList.addEventListener("keydown", (event) => {
+      if (
+        (event.key !== "Enter" && event.key !== " ") ||
+        !(event.target instanceof Element) ||
+        event.target.closest(".shelf-delete")
+      ) {
+        return;
+      }
+
+      const item = event.target.closest(".shelf-item");
+
+      if (!item || event.target !== item) {
+        return;
+      }
+
+      const bookKey = item.dataset.bookKey;
+
+      if (bookKey) {
+        event.preventDefault();
+        openShelfBook(bookKey);
+      }
+    });
+
+    backToShelf.addEventListener("click", () => {
+      // 切换视图会隐藏当前滚动容器，因此必须在隐藏正文之前保存进度。
+      saveReadingProgress();
+      clearTimeout(progressSaveTimer);
+
+      if (history.state?.view === "reader") {
+        history.back();
+        return;
+      }
+
+      ++loadSeq;
+      currentBookKey = null;
+      showShelfView();
+      renderShelf();
+      window.scrollTo(0, 0);
+    });
+
+    window.addEventListener("popstate", () => {
+      if (document.body.dataset.view !== "reader") {
+        return;
+      }
+
+      saveReadingProgress();
+      clearTimeout(progressSaveTimer);
+
+      ++loadSeq;
+      currentBookKey = null;
+      showShelfView();
+      renderShelf();
+      window.scrollTo(0, 0);
+    });
+
+    function showToast(message) {
+      readingToast.textContent = message;
       readingToast.classList.add("show");
 
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => {
         readingToast.classList.remove("show");
       }, 2000);
+    }
+
+    function showReadingToast() {
+      showToast("已回到上次阅读位置");
     }
 
     function restoreReadingProgress(bookKey, seq) {
@@ -817,6 +1035,8 @@
         const text = decodeText(buffer);
         readingContent.textContent = text;
         currentBookKey = lastBookKey;
+        showReaderView();
+        window.scrollTo(0, 0);
         restoreReadingProgress(lastBookKey, seq);
       } catch (error) {
         if (seq !== loadSeq) {
@@ -905,6 +1125,8 @@
         readingContent.textContent = text;
         currentBookKey = bookKey;
         saveSetting(LAST_BOOK_KEY, bookKey);
+        showReaderView();
+        window.scrollTo(0, 0);
         restoreReadingProgress(bookKey, seq);
       } catch (error) {
         if (seq !== loadSeq) {
@@ -922,6 +1144,8 @@
     });
 
     async function initializeReader() {
+      history.replaceState({ view: "shelf" }, "");
+
       const startingLoadSeq = loadSeq;
       await renderShelf();
 
