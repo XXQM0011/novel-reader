@@ -407,11 +407,15 @@
       backToShelf.setAttribute("hidden", "");
     }
 
+    function applyReaderView() {
+      document.body.dataset.view = "reader";
+      backToShelf.removeAttribute("hidden");
+    }
+
     function showReaderView() {
       const isEnteringReader = document.body.dataset.view !== "reader";
 
-      document.body.dataset.view = "reader";
-      backToShelf.removeAttribute("hidden");
+      applyReaderView();
 
       // 历史栈：
       // 初始 [shelf] -> 从书架打开书籍 [shelf, reader]
@@ -835,8 +839,23 @@
       window.scrollTo(0, 0);
     });
 
-    window.addEventListener("popstate", () => {
-      if (document.body.dataset.view !== "reader") {
+    window.addEventListener("popstate", (event) => {
+      const target = event.state?.view === "reader" ? "reader" : "shelf";
+
+      // 不能只看 body.dataset.view：后退后界面是 shelf，再前进时它仍然是 shelf，
+      // 只看当前视图会误以为无须切换，导致历史指针与界面错位。
+      if (target === "reader") {
+        if (document.body.dataset.view !== "reader") {
+          try {
+            currentBookKey = localStorage.getItem(LAST_BOOK_KEY);
+          } catch (error) {
+            console.error(error);
+            currentBookKey = null;
+          }
+
+          applyReaderView();
+        }
+
         return;
       }
 
