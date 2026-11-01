@@ -1,0 +1,41 @@
+{
+  "name": "reader",
+  "version": "1.0.0",
+  "description": "纯前端 txt 小说阅读器",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "build": {
+    "appId": "com.xxqm0011.novelreader",
+    "productName": "NovelReader",
+    "files": [
+      "index.html",
+      "main.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/XXQM0011/novel-reader.git"
+  },
+  "keywords": [],
+  "author": "XXQM0011",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/XXQM0011/novel-reader/issues"
+  },
+  "homepage": "https://github.com/XXQM0011/novel-reader#readme",
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
+  }
+}
