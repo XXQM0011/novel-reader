@@ -259,85 +259,156 @@
       padding: 0 32px;
     }
 
-    .shelf-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+     .shelf-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: var(--space-3);
     }
 
     .shelf-item {
+      position: relative;
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      gap: var(--space-1) var(--space-3);
       width: 100%;
-      min-height: 44px;
-      padding: 8px 12px;
-      border: 1px solid rgba(128, 128, 128, 0.2);
-      border-radius: 8px;
-      color: var(--fg);
-      background: var(--bg);
+      padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      background: var(--surface-1);
       font: inherit;
       text-align: left;
       cursor: pointer;
+      transition:
+        transform var(--dur-fast) var(--ease),
+        border-color var(--dur-fast) var(--ease),
+        box-shadow var(--dur-fast) var(--ease);
+    }
+
+    .shelf-item:hover {
+      transform: translateY(-1px);
+      border-color: var(--border-strong);
+      box-shadow: 0 6px 18px rgba(50, 40, 20, 0.08);
     }
 
     .shelf-item:focus-visible {
-      outline: 3px solid rgba(63, 111, 94, 0.35);
+      outline: 3px solid var(--focus-ring);
       outline-offset: 2px;
+    }
+
+    .shelf-cover {
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 54px;
+      border-radius: var(--radius-sm);
+      color: #fff;
+      background: hsl(var(--cover-hue, 160) 32% 38%);
+      font-size: var(--text-lg);
+      font-weight: 500;
+      line-height: 1;
+    }
+
+    :root.dark .shelf-cover {
+      background: hsl(var(--cover-hue, 160) 28% 26%);
+      color: #e8e3d8;
     }
 
     .shelf-title {
       min-width: 0;
-      flex: 1;
+      flex: 1 1 120px;
       overflow: hidden;
-      font-size: 15px;
+      font-size: var(--text-sm);
+      line-height: var(--leading-tight);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
     .shelf-chars {
       flex: none;
-      font-size: 12px;
+      font-size: var(--text-xs);
+      color: var(--text-muted);
       white-space: nowrap;
-      opacity: 0.55;
     }
 
     .shelf-progress {
       flex: none;
-      margin-left: 8px;
-      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
 
+    .shelf-progress::before {
+      content: "";
+      width: 44px;
+      height: 4px;
+      border-radius: 999px;
+      background: linear-gradient(
+        to right,
+        var(--accent) var(--p, 0%),
+        var(--surface-2) var(--p, 0%)
+      );
+    }
+
     .shelf-delete {
-      flex: none;
-      min-width: 36px;
-      min-height: 32px;
-      padding: 4px 8px;
-      border: 1px solid rgba(128, 128, 128, 0.4);
-      border-radius: 6px;
-      color: var(--fg);
+      position: absolute;
+      top: var(--space-1);
+      right: var(--space-1);
+      min-width: 28px;
+      min-height: 24px;
+      padding: 2px var(--space-2);
+      border: 0;
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
       background: transparent;
       font: inherit;
-      font-size: 12px;
+      font-size: var(--text-xs);
       cursor: pointer;
+      opacity: 0.5;
+      transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+    }
+
+    .shelf-item:hover .shelf-delete,
+    .shelf-item:focus-within .shelf-delete {
+      opacity: 1;
+    }
+
+    .shelf-delete:hover {
+      color: var(--text-primary);
+      background: var(--surface-2);
     }
 
     .shelf-delete:focus-visible {
-      outline: 3px solid rgba(63, 111, 94, 0.35);
+      outline: 3px solid var(--focus-ring);
       outline-offset: 2px;
+    }
+    
+    .shelf-list {
+      grid-template-columns: 1fr;
+    }
+
+    /* 触屏没有 hover，删除按钮必须常亮 */
+    @media (hover: none) {
+      .shelf-delete {
+        opacity: 1;
+      }
     }
 
     .shelf-empty {
       margin: 0;
-      padding: 16px 0;
-      color: var(--fg);
-      font-size: 14px;
-      line-height: 1.8;
+      padding: var(--space-5) var(--space-4);
+      border: 1px dashed var(--border-subtle);
+      border-radius: var(--radius-md);
+      color: var(--text-muted);
+      font-size: var(--text-sm);
+      line-height: var(--leading-normal);
       text-align: center;
-      opacity: 0.55;
     }
 
     .reading-toast {
@@ -755,6 +826,15 @@
           progress.className = "shelf-progress";
           progress.textContent = `${Math.round(savedProgress * 100)}%`;
 
+          // 封面块：书名首字 + 书名决定的色相；进度条比例通过 --p 传给 CSS。
+          const cover = document.createElement("div");
+
+          cover.className = "shelf-cover";
+          cover.textContent = title.textContent.slice(0, 1);
+          cover.style.setProperty("--cover-hue", String(bookHue(title.textContent)));
+          progress.style.setProperty("--p", progress.textContent);
+          item.prepend(cover);
+
           deleteButton.type = "button";
           deleteButton.className = "shelf-delete";
           deleteButton.textContent = "删";
@@ -867,6 +947,17 @@
       } finally {
         await renderShelf();
       }
+    }
+    
+     // 用书名算一个稳定的色相：同一本书永远同一种封面颜色，重启也不变。
+    function bookHue(name) {
+      let hue = 0;
+
+      for (let i = 0; i < name.length; i += 1) {
+        hue = (hue * 31 + name.charCodeAt(i)) % 360;
+      }
+
+      return hue;
     }
 
     // 书架条目由 renderShelf 动态创建，因此统一在列表上使用事件委托。
