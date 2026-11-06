@@ -7,10 +7,12 @@
 https://xxqm0011.github.io/novel-reader/
 
 ## 桌面版
-- 下载 Windows 单文件 exe 后双击即可运行，不需要安装。
-- 目前还没有提供公开下载链接，安装包不会放进 Git 仓库。
-- 桌面版和网页版的数据互不相通，各自独立存储。
-- exe 没有代码签名，Windows 可能提示“未知发布者”。
+
+- 桌面版是独立的 Tauri 工程（`reader-tauri` 仓库），与网页版共用同一份 `index.html`。
+- 早期用 Electron 打包，安装包 105.1 MB；为压缩体积已迁移到 Tauri，安装包约 1.3 MB。
+- 目前还没有提供公开下载链接，安装包不进 Git 仓库。
+- 桌面版和网页版数据互不相通，各自独立存储（IndexedDB 按 origin 隔离）。
+- 安装包没有代码签名，Windows 可能提示"未知发布者"。
 
 ## 功能
 - 导入 txt，自动识别 UTF-8、GBK、UTF-16 编码。
@@ -20,7 +22,7 @@ https://xxqm0011.github.io/novel-reader/
 - 删除书籍，同时清理本地正文、元数据和阅读进度。
 
 ## 技术栈
-原生 JavaScript + IndexedDB + localStorage，单文件 `index.html`（1181 行），无框架、无构建步骤。
+原生 JavaScript + IndexedDB + localStorage，单文件 `index.html`（1375 行），无框架、无构建步骤。
 
 ## 已知限制
 - 书籍正文和阅读进度只保存在当前浏览器的本地存储中，更换设备、浏览器或清除站点数据后不会恢复。
@@ -28,3 +30,7 @@ https://xxqm0011.github.io/novel-reader/
 - 不支持全文搜索和书源导入，只能手动选择本地 txt 文件。
 - 浏览器存储空间有限，可保存的书籍数量和体积受当前设备及浏览器配额限制。
 - 删除书籍后，正文、元数据和阅读进度会一并删除，无法从应用内恢复。
+
+- 只支持 `.txt` / `.md`，不支持 EPUB、MOBI、AZW3 等电子书格式。
+- 不支持全文搜索和书源导入（在计划中）。
+
