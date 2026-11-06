@@ -213,20 +213,31 @@
       outline-offset: 2px;
     }
 
-    .reading-content {
-      max-width: 720px;
-      min-height: 60vh;
-      margin: 0 auto;
-      padding: 24px 32px 64px;
-      border-radius: 8px;
-      color: var(--fg);
-      background: var(--bg);
-      box-shadow: 0 4px 24px rgba(50, 40, 20, 0.08);
-      font-size: var(--font-size);
-      line-height: 1.8;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
+  .reading-content {
+    max-width: 720px;
+    min-height: 60vh;
+    margin: 0 auto;
+    padding: 48px 40px 96px;
+    border-radius: 12px;
+    color: var(--text-primary);
+    background: var(--surface-1);
+    box-shadow: 0 4px 24px rgba(50, 40, 20, 0.08);
+    font-size: var(--font-size);
+    line-height: 1.9;
+    letter-spacing: 0.01em;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: justify;
+  } 
+  .reading-content p {
+  margin: 0 0 0.7em;
+  text-indent: 2em;
+  text-align: justify;
+  }
+
+.reading-content p:last-child {
+  margin-bottom: 0;
+  }
 
     :root.dark .reading-content {
       box-shadow: none;
@@ -880,7 +891,7 @@
         currentBookKey = bookKey;
 
         const text = decodeText(buffer);
-        readingContent.textContent = text;
+        setReadingText(text);
         saveSetting(LAST_BOOK_KEY, bookKey);
 
         const metas = await getAllBookMeta();
@@ -949,6 +960,25 @@
       }
     }
     
+  function setReadingText(text) {
+  const fragment = document.createDocumentFragment();
+  const paragraphs = String(text ?? "").split(/\r?\n/);
+
+  for (const raw of paragraphs) {
+    const line = raw.trim();
+
+    if (!line) {
+      continue;
+    }
+
+    const p = document.createElement("p");
+    p.textContent = line;
+    fragment.append(p);
+  }
+
+  readingContent.replaceChildren(fragment);
+}
+
      // 用书名算一个稳定的色相：同一本书永远同一种封面颜色，重启也不变。
     function bookHue(name) {
       let hue = 0;
@@ -1232,7 +1262,7 @@
         }
 
         const text = decodeText(buffer);
-        readingContent.textContent = text;
+        setReadingText(text);
         currentBookKey = lastBookKey;
         showReaderView();
         window.scrollTo(0, 0);
@@ -1321,7 +1351,7 @@
           return;
         }
 
-        readingContent.textContent = text;
+        setReadingText(text);
         currentBookKey = bookKey;
         saveSetting(LAST_BOOK_KEY, bookKey);
         showReaderView();
