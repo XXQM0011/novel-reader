@@ -493,7 +493,7 @@
     <input
       id="file-input"
       type="file"
-      accept=".txt,.md,text/plain"
+      accept=".txt,.md,.epub,text/plain"
       hidden
     >
     <button id="select-file" class="file-button" type="button">
@@ -546,6 +546,7 @@
     hidden
   ></div>
 
+  <script src="epub.js"></script>
   <script>
     const fileInput = document.getElementById("file-input");
     const selectButton = document.getElementById("select-file");
@@ -565,9 +566,10 @@
     let loadSeq = 0;
 
     const DB_NAME = "reader";
-    const DB_VERSION = 2;
+    const DB_VERSION = 3;
     const BOOK_STORE = "books";
     const META_STORE = "meta";
+    const CHAPTER_STORE = "chapters";
     const LAST_BOOK_KEY = "reader.lastBookKey";
 
     // 不同域名 = 不同的 IndexedDB 数据库。
@@ -614,6 +616,10 @@
           if (!db.objectStoreNames.contains(META_STORE)) {
             db.createObjectStore(META_STORE);
           }
+
+          if (!db.objectStoreNames.contains(CHAPTER_STORE)) {
+            db.createObjectStore(CHAPTER_STORE);
+          }
         };
 
         request.onsuccess = () => {
@@ -656,6 +662,44 @@
         const transaction = db.transaction(META_STORE, "readwrite");
 
         transaction.objectStore(META_STORE).put(meta, bookKey);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    }
+
+    async function putChapters(bookKey, chapters) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(CHAPTER_STORE, "readwrite");
+
+        transaction.objectStore(CHAPTER_STORE).put(chapters, bookKey);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    }
+
+    async function getChapters(bookKey) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(CHAPTER_STORE, "readonly");
+        const request = transaction.objectStore(CHAPTER_STORE).get(bookKey);
+
+        request.onsuccess = () => resolve(request.result ?? null);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    async function deleteChapters(bookKey) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(CHAPTER_STORE, "readwrite");
+
+        transaction.objectStore(CHAPTER_STORE).delete(bookKey);
         transaction.oncomplete = () => resolve();
         transaction.onerror = () => reject(transaction.error);
         transaction.onabort = () => reject(transaction.error);
@@ -946,6 +990,7 @@
         await deleteBook(bookKey);
 
         await deleteBookMeta(bookKey);
+        await deleteChapters(bookKey);
 
         localStorage.removeItem(getProgressKey(bookKey));
 
@@ -1304,21 +1349,7 @@
       { passive: true }
     );
 
-    fileInput.addEventListener("change", async () => {
-      const file = fileInput.files[0];
-
-      if (!file) {
-        return;
-      }
-
-      const seq = ++loadSeq;
-      const bookKey = `${file.name}::${file.size}`;
-
-      clearTimeout(progressSaveTimer);
-      saveReadingProgress();
-      currentBookKey = null;
-      showLoadingState();
-
+    async function importTextFile(file, seq, bookKey) {
       try {
         const buffer = await file.arrayBuffer();
 
@@ -1369,6 +1400,109 @@
           clearLoadingState();
           fileInput.value = "";
         }
+      }
+    }
+
+    async function importEpubFile(file, seq, bookKey) {
+      try {
+        const info = await NovelEpub.inspectEpub(file);
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        const chapterData = await NovelEpub.getChapters(file);
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        const cover = await NovelEpub.getCover(file);
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        const buffer = await file.arrayBuffer();
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        await putBook(bookKey, buffer);
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        await putChapters(bookKey, chapterData.chapters);
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        const now = Date.now();
+        await putBookMeta(bookKey, {
+          bookKey,
+          name: file.name,
+          size: file.size,
+          format: "epub",
+          chars: chapterData.chars,
+          author: info.author || "",
+          cover: cover ? cover.blob : null,
+          readingMode: "chapter",
+          addedAt: now,
+          lastReadAt: now,
+        });
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        await renderShelf();
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        updateStorageUsage();
+        showShelfView();
+        window.scrollTo(0, 0);
+      } catch (error) {
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        showToast("解析失败：" + error.message);
+        console.error(error);
+      } finally {
+        if (seq === loadSeq) {
+          clearLoadingState();
+          fileInput.value = "";
+        }
+      }
+    }
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files[0];
+
+      if (!file) {
+        return;
+      }
+
+      const isEpub = /\.epub$/i.test(file.name);
+      const seq = ++loadSeq;
+      const bookKey = `${file.name}::${file.size}`;
+
+      clearTimeout(progressSaveTimer);
+      saveReadingProgress();
+      currentBookKey = null;
+      showLoadingState();
+
+      if (isEpub) {
+        await importEpubFile(file, seq, bookKey);
+      } else {
+        await importTextFile(file, seq, bookKey);
       }
     });
 
