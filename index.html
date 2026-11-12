@@ -327,6 +327,12 @@
       color: #e8e3d8;
     }
 
+    /* 封面是图片时填满整块，不拉伸变形。 */
+    img.shelf-cover {
+      object-fit: cover;
+      display: block;
+    }
+
     .shelf-title {
       min-width: 0;
       flex: 1 1 120px;
@@ -564,6 +570,8 @@
     let progressSaveTimer = null;
     let toastTimer = null;
     let loadSeq = 0;
+    // 书架封面的 objectURL 不会自己释放，每次重建 DOM 前必须全部 revoke。
+    let shelfCoverUrls = [];
 
     const DB_NAME = "reader";
     const DB_VERSION = 3;
@@ -843,6 +851,12 @@
       }
     }
 
+    // 释放上一轮书架封面的 objectURL；重建 DOM 前必须调用。
+    function releaseShelfCoverUrls() {
+      shelfCoverUrls.forEach((url) => URL.revokeObjectURL(url));
+      shelfCoverUrls = [];
+    }
+
     async function renderShelf() {
       try {
         // 书架只对 meta 调用 getAll；绝不能对 books 调用 getAll：
@@ -855,6 +869,7 @@
             (Number(first.lastReadAt) || 0)
         );
 
+        releaseShelfCoverUrls();
         shelfList.replaceChildren();
         shelfEmpty.hidden = metas.length > 0;
 
@@ -873,7 +888,10 @@
           item.setAttribute("role", "button");
 
           title.className = "shelf-title";
-          title.textContent = String(meta.name ?? "").replace(/\.txt$/i, "");
+          title.textContent = String(meta.name ?? "").replace(
+            /\.(txt|epub)$/i,
+            ""
+          );
 
           chars.className = "shelf-chars";
           chars.textContent = `${charCount.toLocaleString("zh-CN")} 字`;
@@ -881,12 +899,31 @@
           progress.className = "shelf-progress";
           progress.textContent = `${Math.round(savedProgress * 100)}%`;
 
-          // 封面块：书名首字 + 书名决定的色相；进度条比例通过 --p 传给 CSS。
-          const cover = document.createElement("div");
+          // 封面块：有封面图就用图片；否则退回书名首字 + 书名决定的色相。
+          // 进度条比例通过 --p 传给 CSS。
+          let cover;
 
-          cover.className = "shelf-cover";
-          cover.textContent = title.textContent.slice(0, 1);
-          cover.style.setProperty("--cover-hue", String(bookHue(title.textContent)));
+          if (meta.cover instanceof Blob) {
+            const coverUrl = URL.createObjectURL(meta.cover);
+
+            shelfCoverUrls.push(coverUrl);
+
+            cover = document.createElement("img");
+            cover.className = "shelf-cover";
+            cover.src = coverUrl;
+            cover.alt = "";
+            cover.loading = "lazy";
+            cover.decoding = "async";
+          } else {
+            cover = document.createElement("div");
+            cover.className = "shelf-cover";
+            cover.textContent = title.textContent.slice(0, 1);
+            cover.style.setProperty(
+              "--cover-hue",
+              String(bookHue(title.textContent))
+            );
+          }
+
           progress.style.setProperty("--p", progress.textContent);
           item.prepend(cover);
 
@@ -904,6 +941,7 @@
           shelfList.append(item);
         }
       } catch (error) {
+        releaseShelfCoverUrls();
         shelfList.replaceChildren();
         shelfEmpty.hidden = false;
         console.error(error);
@@ -921,6 +959,55 @@
       showLoadingState();
 
       try {
+        // 先看这本书的 format：老数据没有这个字段，一律按 txt 处理。
+        const bookMetas = await getAllBookMeta();
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        const bookMeta = bookMetas.find((meta) => meta.bookKey === bookKey);
+
+        if (bookMeta?.format === "epub") {
+          const chapters = await getChapters(bookKey);
+
+          if (seq !== loadSeq) {
+            return;
+          }
+
+          if (!chapters || chapters.length === 0) {
+            throw new Error("章节数据丢失，请重新导入");
+          }
+
+          currentBookKey = bookKey;
+
+          // 今天只渲染第一章，章节切换还没做。
+          setReadingText(chapters[0].text);
+          saveSetting(LAST_BOOK_KEY, bookKey);
+
+          await putBookMeta(bookKey, {
+            ...bookMeta,
+            lastReadAt: Date.now(),
+          });
+
+          if (seq !== loadSeq) {
+            return;
+          }
+
+          await renderShelf();
+
+          if (seq !== loadSeq) {
+            return;
+          }
+
+          showReaderView();
+          window.scrollTo(0, 0);
+
+          // 不恢复进度：进度按整本书的滚动比例存，现在只有第一章，
+          // 恢复一个 40% 的位置会让人以为第一章读到一半就完了。
+          return;
+        }
+
         // 只读取当前这一本正文，不对 books 表执行 getAll。
         const buffer = await getBook(bookKey);
 
