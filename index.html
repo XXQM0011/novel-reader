@@ -18,11 +18,23 @@
             "--font-size",
             `${savedFontSize}px`
           );
+          // 书页专用变量，会穿透 Shadow DOM。
+          document.documentElement.style.setProperty(
+            "--reader-font-size",
+            `${savedFontSize}px`
+          );
         }
 
-        if (localStorage.getItem("reader.theme") === "dark") {
+        const isDark = localStorage.getItem("reader.theme") === "dark";
+
+        if (isDark) {
           document.documentElement.classList.add("dark");
         }
+
+        document.documentElement.style.setProperty(
+          "--reader-color",
+          isDark ? "#d8d8d8" : "#2b2b2b"
+        );
       } catch (error) {
         console.error(error);
       }
@@ -113,7 +125,9 @@
       font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
     }
 
-    body[data-view="shelf"] #reading-content {
+    /* 书架视图下两个正文容器都要藏起来，否则 epub 正文会露在书架下方。 */
+    body[data-view="shelf"] #reading-content,
+    body[data-view="shelf"] #epub-content {
       display: none;
     }
 
@@ -243,10 +257,45 @@
       box-shadow: none;
     }
 
+    /* epub 章节渲染容器。里面是 Shadow DOM，样式由 renderChapter 提供。 */
+    .epub-content {
+      max-width: 720px;
+      margin: 0 auto;
+      box-sizing: border-box;
+    }
+
+    .epub-content[hidden] {
+      display: none;
+    }
+
+    .epub-content img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+    }
+
+    .image-missing {
+      color: var(--text-muted);
+      font-size: var(--text-sm);
+      font-style: italic;
+    }
+
     .reading-content:empty::before {
       content: "请选择一个 TXT 文件开始阅读";
       color: var(--fg);
       opacity: 0.55;
+    }
+
+    /* 空章节（封面页、版权页）的占位段落。
+       用 .reading-content p.chapter-blank 提高权重，压过 .reading-content p
+       的 text-align: justify 和 text-indent: 2em。 */
+    .reading-content p.chapter-blank {
+      color: var(--text-muted);
+      opacity: 0.6;
+      font-style: italic;
+      text-align: center;
+      text-indent: 0;
     }
 
     .loading {
@@ -428,6 +477,159 @@
       text-align: center;
     }
 
+    /* 目录面板：默认滑出屏幕外，靠 .is-open 滑入。
+       hidden 不用 display:none，否则 transition 不会播放；
+       改用 visibility 让它在关闭态真正不可见、不进可访问性树。 */
+    .toc-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 20; /* 必须高于 .toolbar 的 10 */
+      display: flex;
+      flex-direction: column;
+      width: min(320px, 85vw);
+      background: var(--surface-1);
+      border-left: 1px solid var(--border-subtle);
+      transform: translateX(100%);
+      visibility: hidden;
+      transition:
+        transform 180ms var(--ease),
+        visibility 0s linear 180ms;
+      pointer-events: none;
+    }
+
+    .toc-panel.is-open {
+      transform: translateX(0);
+      visibility: visible;
+      transition:
+        transform 180ms var(--ease),
+        visibility 0s;
+      pointer-events: auto;
+    }
+
+    .toc-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .toc-heading {
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+      font-weight: 500;
+    }
+
+    .toc-close {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      background: transparent;
+      font: inherit;
+      font-size: var(--text-lg);
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .toc-close:hover {
+      color: var(--text-primary);
+      background: var(--surface-2);
+    }
+
+    .toc-close:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+
+    .toc-list {
+      flex: 1;
+      overflow-y: auto;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .toc-item {
+      width: 100%;
+      padding: 10px 16px;
+      border: 0;
+      background: transparent;
+      color: var(--text-primary);
+      font: inherit;
+      font-size: var(--text-sm);
+      text-align: left;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+    }
+
+    .toc-item:hover {
+      background: var(--surface-2);
+    }
+
+    .toc-item.is-current {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .toc-item:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: -3px;
+    }
+
+    .toc-index {
+      margin-right: 8px;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chapter-nav {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 40px 96px;
+      display: flex;
+      gap: var(--space-3);
+    }
+
+    /* hidden 属性自带的 display:none 优先级低于上面的 display:flex，
+       不显式声明的话导航条会一直占着高度露在书架上。 */
+    .chapter-nav[hidden] {
+      display: none;
+    }
+
+    .chapter-nav-button {
+      flex: 1;
+      min-height: 44px;
+      padding: var(--space-2);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--surface-1);
+      color: var(--text-primary);
+      font: inherit;
+      font-size: var(--text-sm);
+      cursor: pointer;
+    }
+
+    .chapter-nav-button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    .chapter-nav-button:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+
     .reading-toast {
       position: fixed;
       left: 50%;
@@ -476,6 +678,14 @@
       .font-size-slider {
         width: 90px;
       }
+
+      .toc-panel {
+        width: 100%;
+      }
+
+      .chapter-nav {
+        padding: 0 16px 48px;
+      }
     }
 
       .reading-content {
@@ -513,6 +723,7 @@
     >
       ← 书架
     </button>
+    <button id="toc-button" class="theme-button" type="button" hidden>目录</button>
     <label class="font-size-control" for="font-size">
       字号
       <input
@@ -539,6 +750,18 @@
 
   <div id="loading" class="loading" hidden>正在打开上次那本书…</div>
   <div id="reading-content" class="reading-content"></div>
+  <div id="epub-content" class="epub-content" hidden></div>
+  <div id="chapter-nav" class="chapter-nav" hidden>
+    <button id="prev-chapter" class="chapter-nav-button" type="button">← 上一章</button>
+    <button id="next-chapter" class="chapter-nav-button" type="button">下一章 →</button>
+  </div>
+  <aside id="toc-panel" class="toc-panel" hidden aria-label="章节目录">
+    <div class="toc-head">
+      <span class="toc-heading">目录</span>
+      <button id="toc-close" class="toc-close" type="button" aria-label="关闭目录">×</button>
+    </div>
+    <ol id="toc-list" class="toc-list"></ol>
+  </aside>
   <div
     id="reading-toast"
     class="reading-toast"
@@ -558,6 +781,7 @@
     const selectButton = document.getElementById("select-file");
     const backToShelf = document.getElementById("back-to-shelf");
     const readingContent = document.getElementById("reading-content");
+    const epubContent = document.getElementById("epub-content");
     const fontSizeInput = document.getElementById("font-size");
     const themeToggle = document.getElementById("theme-toggle");
     const readingToast = document.getElementById("reading-toast");
@@ -565,19 +789,42 @@
     const loading = document.getElementById("loading");
     const shelfList = document.getElementById("shelf-list");
     const shelfEmpty = document.getElementById("shelf-empty");
+    const tocButton = document.getElementById("toc-button");
+    const tocPanel = document.getElementById("toc-panel");
+    const tocClose = document.getElementById("toc-close");
+    const tocList = document.getElementById("toc-list");
+    const chapterNav = document.getElementById("chapter-nav");
+    const prevChapter = document.getElementById("prev-chapter");
+    const nextChapter = document.getElementById("next-chapter");
     const root = document.documentElement;
     let currentBookKey = null;
+    // 当前打开这本书的章节数组；epub 章节切换要用。
+    let currentChapters = null;
+    // 当前读到第几章；关 3 的章节切换要用。
+    let currentChapterIndex = 0;
+    // 当前这本书是不是 epub；决定目录入口是否可见。
+    let currentBookIsEpub = false;
+    // 正在离开阅读视图。history.back() 会让浏览器把 scrollY 重置成 0 并
+    // 触发一次 scroll 事件，那次事件必须被忽略，否则会把正确位置冲成 0。
+    let isLeavingReader = false;
+    // 正在恢复上次位置。这期间的滚动都是中间态，一律不保存。
+    let isRestoringPos = false;
     let progressSaveTimer = null;
     let toastTimer = null;
     let loadSeq = 0;
     // 书架封面的 objectURL 不会自己释放，每次重建 DOM 前必须全部 revoke。
     let shelfCoverUrls = [];
+    // 当前章节里图片的 objectURL，切章时要统一回收。
+    let chapterImageUrls = [];
+    // buildScopedCss 同步阶段记下待解析的 CSS 资源路径，异步阶段再换成 blob URL。
+    let pendingCssUrls = [];
 
     const DB_NAME = "reader";
-    const DB_VERSION = 3;
+    const DB_VERSION = 4;
     const BOOK_STORE = "books";
     const META_STORE = "meta";
     const CHAPTER_STORE = "chapters";
+    const RESOURCE_STORE = "resources";
     const LAST_BOOK_KEY = "reader.lastBookKey";
 
     // 不同域名 = 不同的 IndexedDB 数据库。
@@ -586,6 +833,15 @@
     function showShelfView() {
       document.body.dataset.view = "shelf";
       backToShelf.setAttribute("hidden", "");
+      closeTocPanel();
+      resetBookState();
+      syncEpubUiVisibility();
+
+      // 历史栈顶必须是 shelf，否则「返回书架」按钮会因为
+      // history.state.view 还是 reader 而误判，点了没反应。
+      if (history.state?.view !== "shelf") {
+        history.replaceState({ view: "shelf" }, "");
+      }
     }
 
     function applyReaderView() {
@@ -593,10 +849,39 @@
       backToShelf.removeAttribute("hidden");
     }
 
+    // 回到书架时把当前书的状态清干净，避免上一本的章节残留到下一本。
+    function resetBookState() {
+      currentChapters = null;
+      currentChapterIndex = 0;
+      currentBookIsEpub = false;
+      updateChapterNav();
+    }
+
+    // 目录入口和章节导航的显隐条件必须一致，统一在这里算。
+    function syncEpubUiVisibility() {
+      const isReaderView = document.body.dataset.view === "reader";
+      const show = isReaderView && currentBookIsEpub;
+
+      tocButton.hidden = !show;
+      chapterNav.hidden = !show;
+    }
+
+    // 第一章禁用「上一章」，最后一章禁用「下一章」。
+    function updateChapterNav() {
+      const total = currentChapters ? currentChapters.length : 0;
+      const hasChapters = total > 0;
+
+      prevChapter.disabled = !hasChapters || currentChapterIndex <= 0;
+      nextChapter.disabled = !hasChapters || currentChapterIndex >= total - 1;
+    }
+
     function showReaderView() {
       const isEnteringReader = document.body.dataset.view !== "reader";
 
       applyReaderView();
+      // 进入阅读视图，重新允许记录滚动位置。
+      isLeavingReader = false;
+      syncEpubUiVisibility();
 
       // 历史栈：
       // 初始 [shelf] -> 从书架打开书籍 [shelf, reader]
@@ -627,6 +912,10 @@
 
           if (!db.objectStoreNames.contains(CHAPTER_STORE)) {
             db.createObjectStore(CHAPTER_STORE);
+          }
+
+          if (!db.objectStoreNames.contains(RESOURCE_STORE)) {
+            db.createObjectStore(RESOURCE_STORE);
           }
         };
 
@@ -708,6 +997,116 @@
         const transaction = db.transaction(CHAPTER_STORE, "readwrite");
 
         transaction.objectStore(CHAPTER_STORE).delete(bookKey);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    }
+
+    // 资源 key：`${bookKey}::${path}`。bookKey 里已经有一个 ::，
+    // 用 path 相对 opfDir（如 images/cover.jpg）拼在后面，不会和 / 冲突。
+    function getResourceKey(bookKey, path) {
+      return `${bookKey}::${path}`;
+    }
+
+    // 一次性写入全部图片。几十张图各开一个事务会明显变慢。
+    // 一次性写入全部资源。几十条各开一个事务会明显变慢。
+    // 同一套 key 里装两种东西：
+    //   图片/字体 → { blob, mediaType }
+    //   CSS 文本  → { text }
+    // 语义上不够纯，但省掉一个 store（删书要清的地方也跟着少一处）。
+    async function putResources(bookKey, resources) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(RESOURCE_STORE, "readwrite");
+        const store = transaction.objectStore(RESOURCE_STORE);
+
+        for (const resource of resources) {
+          // 不存 bookKey / path，它们已经在 key 里了。
+          const value =
+            typeof resource.text === "string"
+              ? { text: resource.text }
+              : { blob: resource.blob, mediaType: resource.mediaType };
+
+          store.put(value, getResourceKey(bookKey, resource.path));
+        }
+
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    }
+
+    async function getResource(bookKey, path) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(RESOURCE_STORE, "readonly");
+        const request = transaction
+          .objectStore(RESOURCE_STORE)
+          .get(getResourceKey(bookKey, path));
+
+        request.onsuccess = () => resolve(request.result ?? null);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    // 取出这本书存下的全部 CSS 记录（只有 { text } 那种，没有 blob）。
+    // 返回 [{ path, text }]，path 相对 opfDir，供 url() 相对解析用。
+    async function getStyleSheets(bookKey) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(RESOURCE_STORE, "readonly");
+        const store = transaction.objectStore(RESOURCE_STORE);
+        const keysRequest = store.getAllKeys();
+        const valuesRequest = store.getAll();
+
+        transaction.oncomplete = () => {
+          const prefix = `${bookKey}::`;
+          const sheets = [];
+
+          keysRequest.result.forEach((key, index) => {
+            const value = valuesRequest.result[index];
+
+            if (
+              typeof key === "string" &&
+              key.startsWith(prefix) &&
+              value &&
+              typeof value.text === "string"
+            ) {
+              sheets.push({ path: key.slice(prefix.length), text: value.text });
+            }
+          });
+
+          resolve(sheets);
+        };
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    }
+
+    // IndexedDB 没有按前缀删的 API，只能拿到所有 key 再过滤。
+    async function deleteResources(bookKey) {
+      const db = await openDB();
+
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(RESOURCE_STORE, "readwrite");
+        const store = transaction.objectStore(RESOURCE_STORE);
+        const keysRequest = store.getAllKeys();
+
+        keysRequest.onsuccess = () => {
+          const prefix = `${bookKey}::`;
+
+          for (const key of keysRequest.result) {
+            if (typeof key === "string" && key.startsWith(prefix)) {
+              store.delete(key);
+            }
+          }
+        };
+        keysRequest.onerror = () => reject(keysRequest.error);
+
         transaction.oncomplete = () => resolve();
         transaction.onerror = () => reject(transaction.error);
         transaction.onabort = () => reject(transaction.error);
@@ -829,22 +1228,64 @@
       return document.scrollingElement || document.documentElement;
     }
 
-    function getProgressKey(bookKey) {
+    function getPosKey(bookKey) {
+      return `reader.pos:${bookKey}`;
+    }
+
+    // 旧模型：整本书的滚动比例，只有一个 0~1 的数字。
+    function getLegacyProgressKey(bookKey) {
       return `reader.progress:${bookKey}`;
     }
 
-    function getSavedProgress(bookKey) {
-      try {
-        const savedValue = localStorage.getItem(getProgressKey(bookKey));
+    function isValidPos(pos) {
+      return (
+        pos !== null &&
+        typeof pos === "object" &&
+        Number.isFinite(pos.chapter) &&
+        Number.isFinite(pos.ratio) &&
+        pos.chapter >= 0 &&
+        pos.ratio >= 0 &&
+        // 旧版本滚到最底部会存出 1.00006 这种亚像素误差值，
+        // 留一点容差，别把用户已有的进度判成非法。
+        pos.ratio <= 1.01
+      );
+    }
 
-        if (savedValue === null) {
+    function getSavedPos(bookKey) {
+      try {
+        const savedValue = localStorage.getItem(getPosKey(bookKey));
+
+        if (savedValue !== null) {
+          try {
+            const parsed = JSON.parse(savedValue);
+
+            if (isValidPos(parsed)) {
+              return { chapter: parsed.chapter, ratio: parsed.ratio };
+            }
+          } catch {
+            // 新 key 内容坏了，往下走旧 key 兜底。
+          }
+        }
+
+        const legacyValue = localStorage.getItem(getLegacyProgressKey(bookKey));
+
+        if (legacyValue === null) {
           return null;
         }
 
-        const progress = Number(savedValue);
-        return Number.isFinite(progress) && progress >= 0 && progress <= 1
-          ? progress
-          : null;
+        const legacyRatio = Number(legacyValue);
+
+        if (!Number.isFinite(legacyRatio) || legacyRatio < 0 || legacyRatio > 1) {
+          return null;
+        }
+
+        // 老用户的进度都在旧 key 里，直接换 key 等于静默清零，必须迁移。
+        const migrated = { chapter: 0, ratio: legacyRatio };
+
+        saveSetting(getPosKey(bookKey), JSON.stringify(migrated));
+        removeSetting(getLegacyProgressKey(bookKey));
+
+        return migrated;
       } catch (error) {
         console.error(error);
         return null;
@@ -880,7 +1321,11 @@
           const chars = document.createElement("span");
           const progress = document.createElement("span");
           const deleteButton = document.createElement("button");
-          const savedProgress = getSavedProgress(meta.bookKey) ?? 0;
+          const pos = getSavedPos(meta.bookKey);
+          const chapterCount = Number(meta.chapterCount) || 1;
+          const percent = pos
+            ? (pos.chapter + pos.ratio) / chapterCount
+            : 0;
           const charCount = Number(meta.chars) || 0;
 
           item.className = "shelf-item";
@@ -897,7 +1342,7 @@
           chars.textContent = `${charCount.toLocaleString("zh-CN")} 字`;
 
           progress.className = "shelf-progress";
-          progress.textContent = `${Math.round(savedProgress * 100)}%`;
+          progress.textContent = `${Math.round(percent * 100)}%`;
 
           // 封面块：有封面图就用图片；否则退回书名首字 + 书名决定的色相。
           // 进度条比例通过 --p 传给 CSS。
@@ -950,7 +1395,15 @@
 
     async function openShelfBook(bookKey) {
       // 切换视图会隐藏正文并改变布局，必须在离开阅读视图前保存当前进度。
-      saveReadingProgress();
+      // 只在阅读视图里存：从书架点开新书时视图已经是 shelf，
+      // 此时保存会把上一本书的进度用 scrollY=0 覆盖掉。
+      if (document.body.dataset.view === "reader") {
+        saveReadingPos();
+      }
+
+      // 换书前先回收上一本的章节图片。
+      releaseChapterImageUrls();
+
       clearTimeout(progressSaveTimer);
 
       const seq = ++loadSeq;
@@ -980,9 +1433,20 @@
           }
 
           currentBookKey = bookKey;
+          currentChapters = chapters;
+          currentBookIsEpub = true;
 
-          // 今天只渲染第一章，章节切换还没做。
-          setReadingText(chapters[0].text);
+          // 第一章可能是封面页/版权页（只有图片没有文字），
+          // 自动跳到第一个有文字的章节，别停在一页空白上。
+          const firstTextIndex = findFirstTextChapter(chapters);
+
+          currentChapterIndex = firstTextIndex;
+          await renderEpubChapter(chapters[firstTextIndex], bookKey);
+
+          if (seq !== loadSeq) {
+            return;
+          }
+
           saveSetting(LAST_BOOK_KEY, bookKey);
 
           await putBookMeta(bookKey, {
@@ -1001,10 +1465,12 @@
           }
 
           showReaderView();
+          syncEpubUiVisibility();
+          updateChapterNav();
           window.scrollTo(0, 0);
 
-          // 不恢复进度：进度按整本书的滚动比例存，现在只有第一章，
-          // 恢复一个 40% 的位置会让人以为第一章读到一半就完了。
+          // 章节已经就绪，可以按「第几章 + 章内比例」恢复。
+          await applySavedPos(bookKey, getSavedPos(bookKey), seq);
           return;
         }
 
@@ -1020,6 +1486,9 @@
         }
 
         currentBookKey = bookKey;
+        currentChapters = null;
+        currentChapterIndex = 0;
+        currentBookIsEpub = false;
 
         const text = decodeText(buffer);
         setReadingText(text);
@@ -1052,8 +1521,9 @@
 
         // 正文在书架视图中是隐藏的，先切视图再让双层 rAF 计算并恢复滚动位置。
         showReaderView();
+        syncEpubUiVisibility();
         window.scrollTo(0, 0);
-        restoreReadingProgress(bookKey, seq);
+        await applySavedPos(bookKey, getSavedPos(bookKey), seq);
       } catch (error) {
         if (seq !== loadSeq) {
           return;
@@ -1078,8 +1548,11 @@
 
         await deleteBookMeta(bookKey);
         await deleteChapters(bookKey);
+        await deleteResources(bookKey);
 
-        localStorage.removeItem(getProgressKey(bookKey));
+        // 新旧两种进度 key 都要清，否则删书后会留下孤儿进度。
+        removeSetting(getPosKey(bookKey));
+        removeSetting(getLegacyProgressKey(bookKey));
 
         if (localStorage.getItem(LAST_BOOK_KEY) === bookKey) {
           localStorage.removeItem(LAST_BOOK_KEY);
@@ -1093,6 +1566,10 @@
     }
     
   function setReadingText(text) {
+  setContentMode("txt");
+  // 从 epub 切到 txt 时，上一章图片的 blob URL 没人再用了，顺手回收。
+  releaseChapterImageUrls();
+
   const fragment = document.createDocumentFragment();
   const paragraphs = String(text ?? "").split(/\r?\n/);
 
@@ -1108,8 +1585,160 @@
     fragment.append(p);
   }
 
+  // 封面页、版权页这类章节只有图片没有文字。若直接清空，
+  // .reading-content:empty::before 会命中，弹出「请选择一个 TXT 文件
+  // 开始阅读」，让人以为书没打开。插入占位段落说明情况。
+  if (fragment.childNodes.length === 0) {
+    const blank = document.createElement("p");
+
+    blank.className = "chapter-blank";
+    blank.textContent = "（本页没有文字内容）";
+    fragment.append(blank);
+  }
+
   readingContent.replaceChildren(fragment);
 }
+
+    // 正文容器二选一：txt 用 #reading-content，epub 用 #epub-content。
+    function setContentMode(mode) {
+      readingContent.hidden = mode !== "txt";
+      epubContent.hidden = mode !== "epub";
+    }
+
+    // 回收上一章图片的 objectURL。
+    // 用 length = 0 就地清空，不重新赋值：别处可能持有这个数组的引用。
+    function releaseChapterImageUrls() {
+      for (const url of chapterImageUrls) {
+        URL.revokeObjectURL(url);
+      }
+
+      chapterImageUrls.length = 0;
+    }
+
+    // 把章节 HTML 里的图片路径换成当前页可用的 blob URL。
+    async function hydrateImages(html, bookKey) {
+      const doc = new DOMParser().parseFromString(
+        `<body>${html}</body>`,
+        "text/html"
+      );
+      const nodes = [
+        ...doc.querySelectorAll("img[src]"),
+        ...doc.querySelectorAll("image"),
+      ];
+      for (const node of nodes) {
+        const isSvgImage = node.tagName.toLowerCase() === "image";
+        const path = isSvgImage
+          ? (node.getAttribute("xlink:href") ?? node.getAttribute("href"))
+          : node.getAttribute("src");
+        if (!path || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(path)) continue;
+
+        const asset = await getResource(bookKey, path);
+        if (!asset) {
+          // 图片缺失不要抛错，整章还要能读。换成一行说明文字。
+          const placeholder = doc.createElement("span");
+          placeholder.className = "image-missing";
+          placeholder.textContent = "（插图缺失）";
+          node.replaceWith(placeholder);
+          continue;
+        }
+        const url = URL.createObjectURL(asset.blob);
+        chapterImageUrls.push(url);
+        if (isSvgImage) {
+          node.setAttribute("xlink:href", url);
+          node.setAttribute("href", url);
+        } else {
+          node.setAttribute("src", url);
+          node.removeAttribute("srcset");
+        }
+      }
+      return doc.body.innerHTML;
+    }
+
+    // 把书里的 CSS 拼成一段可注入 Shadow DOM 的样式。
+    // 【关键】url() 里的路径是相对「CSS 文件自己」的位置解析的，
+    // 不是相对 opfDir，也不是相对章节。styles/main.css 里的 ../images/a.png
+    // 指的是 images/a.png（相对 opfDir），而不是章节目录下的路径。
+    async function buildScopedCss(bookKey) {
+      const sheets = await getStyleSheets(bookKey);
+
+      if (sheets.length === 0) {
+        return "";
+      }
+
+      // 逐张表分别解析 url()：每张表用自己的目录做基准。
+      // 合并成一段再解析会丢掉「哪张表的路径」这个信息。
+      const parts = [];
+
+      for (const sheet of sheets) {
+        const sheetDir = NovelEpub.dirnamePosix(sheet.path);
+
+        parts.push(
+          NovelEpub.scopeCss(sheet.text, (rawUrl) => {
+            const raw = String(rawUrl ?? "").trim();
+
+            if (!raw) {
+              return raw;
+            }
+
+            // 外链、data: 原样保留。
+            if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(raw)) {
+              return raw;
+            }
+
+            // 开头的 / 指 zip 根，其余相对 CSS 文件所在目录。
+            const resolved = raw.startsWith("/")
+              ? NovelEpub.joinPosix("", raw.replace(/^\/+/, ""))
+              : NovelEpub.joinPosix(sheetDir, raw);
+
+            // 同步阶段拿不到 IndexedDB，先记下待替换的路径。
+            pendingCssUrls.push(resolved);
+            return `__CSS_URL_${pendingCssUrls.length - 1}__`;
+          })
+        );
+      }
+
+      return parts.join("\n");
+    }
+
+    // 把 CSS 里的占位符换成真实的 blob URL。
+    // 必须异步做：需要逐个查 IndexedDB 取资源。
+    async function resolveCssUrls(cssText, bookKey) {
+      const urls = pendingCssUrls.slice();
+      pendingCssUrls.length = 0;
+
+      let result = cssText;
+
+      for (let index = 0; index < urls.length; index += 1) {
+        const asset = await getResource(bookKey, urls[index]);
+        const placeholder = `__CSS_URL_${index}__`;
+
+        if (!asset || !asset.blob) {
+          // 查不到就退回相对 opfDir 的原始路径，至少不会变成空 url()。
+          result = result.split(placeholder).join(urls[index]);
+          continue;
+        }
+
+        const url = URL.createObjectURL(asset.blob);
+        chapterImageUrls.push(url);
+        result = result.split(placeholder).join(url);
+      }
+
+      return result;
+    }
+
+    // 渲染一个 epub 章节到 #epub-content 的 Shadow DOM 里。
+    async function renderEpubChapter(chapter, bookKey) {
+      releaseChapterImageUrls();
+
+      const html = await hydrateImages(chapter.html, bookKey);
+      const scoped = await buildScopedCss(bookKey);
+      const css = await resolveCssUrls(scoped, bookKey);
+
+      setContentMode("epub");
+      NovelEpub.renderChapter(epubContent, html, css);
+      // 清掉 reading-content 里 txt 的残留，避免两套内容同时存在内存里
+      readingContent.replaceChildren();
+    }
 
      // 用书名算一个稳定的色相：同一本书永远同一种封面颜色，重启也不变。
     function bookHue(name) {
@@ -1164,12 +1793,165 @@
       }
     });
 
+    // 找第一个有文字的章节；封面页、版权页这类只有图片的章节要跳过。
+    // 全都没文字时退回第 0 章，让占位段落来说明情况。
+    function findFirstTextChapter(chapters) {
+      if (!chapters || chapters.length === 0) {
+        return 0;
+      }
+
+      const index = chapters.findIndex(
+        (chapter) => String(chapter?.text ?? "").trim().length > 0
+      );
+
+      return index < 0 ? 0 : index;
+    }
+
+    // 章节标题来自书籍内容，不可信，必须 createElement + textContent。
+    function renderTocList() {
+      if (!currentChapters || currentChapters.length === 0) {
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+
+      currentChapters.forEach((chapter, index) => {
+        const item = document.createElement("li");
+        const button = document.createElement("button");
+        const order = document.createElement("span");
+        const label = document.createElement("span");
+
+        button.type = "button";
+        button.className = "toc-item";
+        // dataset 只接受字符串，显式转换避免以后误传数字。
+        button.dataset.index = String(index);
+
+        if (index === currentChapterIndex) {
+          button.classList.add("is-current");
+        }
+
+        order.className = "toc-index";
+        order.textContent = String(index + 1);
+
+        label.textContent = String(chapter?.title ?? "");
+
+        button.append(order, label);
+        item.append(button);
+        fragment.append(item);
+      });
+
+      tocList.replaceChildren(fragment);
+    }
+
+    function openTocPanel() {
+      renderTocList();
+      tocPanel.removeAttribute("hidden");
+      tocPanel.classList.add("is-open");
+    }
+
+    function closeTocPanel() {
+      tocPanel.classList.remove("is-open");
+      tocPanel.setAttribute("hidden", "");
+    }
+
+    async function openChapter(index, options = {}) {
+      if (!currentChapters || currentChapters.length === 0) {
+        return;
+      }
+
+      if (index < 0 || index >= currentChapters.length) {
+        return;
+      }
+
+      currentChapterIndex = index;
+      await renderEpubChapter(currentChapters[index], currentBookKey);
+
+      // 新章必须回到顶部，否则会停在上一章的滚动位置。
+      window.scrollTo(0, 0);
+
+      // 只改类名，不重渲染整个列表。
+      tocList.querySelectorAll(".toc-item.is-current").forEach((item) => {
+        item.classList.remove("is-current");
+      });
+
+      const current = tocList.querySelector(
+        `.toc-item[data-index="${index}"]`
+      );
+
+      if (current) {
+        current.classList.add("is-current");
+      }
+
+      updateChapterNav();
+
+      // 切章就存一次，否则切完章直接关页面会丢掉章号。
+      // 恢复上次位置时传 save: false：那一刻滚动还在 0，存下去会把
+      // 刚读到的 ratio 冲成 0，而正确的值要等滚动完成后再存。
+      if (options.save !== false) {
+        saveReadingPos();
+      }
+    }
+
+    // 目录项统一在列表上做事件委托，不给每个按钮单独绑。
+    tocList.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const item = event.target.closest(".toc-item");
+
+      if (!item) {
+        return;
+      }
+
+      openChapter(Number(item.dataset.index));
+      closeTocPanel();
+    });
+
+    prevChapter.addEventListener("click", () => {
+      openChapter(currentChapterIndex - 1);
+    });
+
+    nextChapter.addEventListener("click", () => {
+      openChapter(currentChapterIndex + 1);
+    });
+
+    tocButton.addEventListener("click", () => {
+      openTocPanel();
+    });
+
+    tocClose.addEventListener("click", () => {
+      closeTocPanel();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      // 只在面板真的打开时响应 Esc。
+      if (event.key !== "Escape" || !tocPanel.classList.contains("is-open")) {
+        return;
+      }
+
+      closeTocPanel();
+    });
+
     backToShelf.addEventListener("click", () => {
       // 切换视图会隐藏当前滚动容器，因此必须在隐藏正文之前保存进度。
-      saveReadingProgress();
+      saveReadingPos();
       clearTimeout(progressSaveTimer);
 
-      if (history.state?.view === "reader") {
+      // 从这里开始，任何 scroll 事件都是浏览器重置滚动位置造成的噪音。
+      isLeavingReader = true;
+
+      // 离开当前章节：这一章的图片 blob URL 不会再被用到。
+      releaseChapterImageUrls();
+
+      // 只有「当前确实在阅读视图，且历史栈顶也是 reader」时才能后退。
+      // 否则 history.state 可能已经和界面脱节（例如刷新后 openLastBook
+      // 推进了历史，随后界面又切回了书架），此时 history.back() 退不到书架，
+      // 点击就会毫无反应。这种情况下直接切视图。
+      if (
+        document.body.dataset.view === "reader" &&
+        history.state?.view === "reader"
+      ) {
         history.back();
         return;
       }
@@ -1179,6 +1961,7 @@
       showShelfView();
       renderShelf();
       window.scrollTo(0, 0);
+      isLeavingReader = false;
     });
 
     window.addEventListener("popstate", (event) => {
@@ -1196,12 +1979,21 @@
           }
 
           applyReaderView();
+          // 回到阅读视图，重新允许记录滚动位置。
+          isLeavingReader = false;
         }
 
         return;
       }
 
-      saveReadingProgress();
+      // 这里刻意不保存进度：popstate 触发时浏览器已经把滚动位置还原成
+      // 上一条历史记录的值（书架是 0），此时读 DOM 只会读到 0，反而把
+      // 正确的位置冲掉。进度已由滚动监听（200ms 防抖）和点「返回书架」
+      // 时在位置仍然有效的情况下存好了。
+
+      // 离开当前章节：这一章的图片 blob URL 不会再被用到。
+      releaseChapterImageUrls();
+
       clearTimeout(progressSaveTimer);
 
       ++loadSeq;
@@ -1209,6 +2001,7 @@
       showShelfView();
       renderShelf();
       window.scrollTo(0, 0);
+      isLeavingReader = false;
     });
 
     function showToast(message) {
@@ -1225,39 +2018,101 @@
       showToast("已回到上次阅读位置");
     }
 
-    function restoreReadingProgress(bookKey, seq) {
-      const savedProgress = getSavedProgress(bookKey);
+    async function applySavedPos(bookKey, pos, seq) {
+      if (pos === null) {
+        return;
+      }
 
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+      // 恢复期间禁止任何保存：这段时间里的滚动（包括 openShelfBook 里的
+      // scrollTo(0,0)）都只是中间态，写下去会把正确位置冲成 0。
+      isRestoringPos = true;
+
+      try {
+        // 顺序不能反：必须先换到目标章节，再按章内比例滚动。
+        // 在旧的 DOM 上滚，滚的是上一章的高度，位置毫无意义。
+        if (pos.chapter > 0 && currentBookIsEpub) {
+          await openChapter(pos.chapter, { save: false });
+
           if (seq !== loadSeq) {
             return;
           }
+        }
 
-          const scrollElement = getScrollElement();
-          const maxScroll = scrollElement.scrollHeight - window.innerHeight;
-          const progress = savedProgress ?? 0;
+        await new Promise((resolve) => {
+          let settled = false;
+          const finish = () => {
+            if (settled) {
+              return;
+            }
 
-          scrollElement.scrollTop = maxScroll > 0 ? progress * maxScroll : 0;
+            settled = true;
+            resolve();
+          };
 
-          if (savedProgress !== null && savedProgress > 0) {
-            showReadingToast();
-          }
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (seq === loadSeq) {
+                const scrollElement = getScrollElement();
+                const maxScroll =
+                  scrollElement.scrollHeight - window.innerHeight;
+                // 夹到 [0, 1]：旧数据可能带亚像素误差（1.00006），
+                // 直接乘会滚过界。
+                const safeRatio = Math.min(1, Math.max(0, pos.ratio));
+
+                scrollElement.scrollTop =
+                  maxScroll > 0 ? safeRatio * maxScroll : 0;
+
+                if (pos.ratio > 0) {
+                  showReadingToast();
+                }
+              }
+
+              finish();
+            });
+          });
+
+          // 后台标签页里 rAF 可能不执行，必须兜底解除标志，
+          // 否则之后所有保存都会被永久拦掉。
+          setTimeout(finish, 600);
         });
-      });
+      } finally {
+        isRestoringPos = false;
+      }
     }
 
-    function saveReadingProgress() {
+    function saveReadingPos() {
       if (currentBookKey === null) {
+        return;
+      }
+
+      // 恢复位置期间滚动还在中间态，不能写。
+      if (isRestoringPos) {
+        return;
+      }
+
+      // 书架视图下正文是 display:none，scrollHeight 塌缩，滚动位置也没意义。
+      // 切视图时浏览器还会把 scrollY 重置成 0，若此时有排队中的防抖保存
+      // 触发，就会把正确的位置覆盖成 0。
+      if (document.body.dataset.view !== "reader") {
         return;
       }
 
       const scrollElement = getScrollElement();
       const maxScroll = scrollElement.scrollHeight - window.innerHeight;
-      const progress =
-        maxScroll > 0 ? scrollElement.scrollTop / maxScroll : 0;
+      // 滚到最底部时 scrollTop 是亚像素值（如 6354.4 / 6354），
+      // 算出来的 ratio 会略大于 1（1.00006）。不夹紧的话存进去的值
+      // 过不了 isValidPos 的 <= 1 校验，读回来变成 null，进度就丢了。
+      const ratio = maxScroll > 0
+        ? Math.min(1, Math.max(0, scrollElement.scrollTop / maxScroll))
+        : 0;
 
-      saveSetting(getProgressKey(currentBookKey), String(progress));
+      // txt 书没有章节，currentChapterIndex 恒为 0。
+      const pos = {
+        chapter: currentChapterIndex,
+        ratio,
+      };
+
+      saveSetting(getPosKey(currentBookKey), JSON.stringify(pos));
     }
 
     function detectUtf16Encoding(bytes) {
@@ -1311,7 +2166,32 @@
       return characters === 0 ? 0 : replacements / characters;
     }
 
-    function decodeText(buffer) {
+    // 二进制文件被当成文本解码后，会产出大量 NUL、控制字符、私用区字符和替换字符。
+    // 正常文本里这些字符几乎不存在，比例过高就说明根本不是文本。
+    // 必须在渲染前拦下来：几百万这种字符塞进 DOM 会让字体回退查找爆炸，页面直接卡死。
+    function looksLikeBinaryText(text) {
+      let suspicious = 0;
+      let characters = 0;
+
+      for (const character of text) {
+        characters++;
+
+        const code = character.codePointAt(0);
+
+        if (
+          code === 0 ||
+          code === 0xfffd ||
+          (code >= 0xe000 && code <= 0xf8ff) ||
+          (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d)
+        ) {
+          suspicious++;
+        }
+      }
+
+      return characters > 0 && suspicious / characters > 0.05;
+    }
+
+    function decodeTextRaw(buffer) {
       const bytes = new Uint8Array(buffer);
 
       if (
@@ -1364,6 +2244,17 @@
       return bestText;
     }
 
+    // 所有解码分支都经过这里校验，避免漏掉某一条 return。
+    function decodeText(buffer) {
+      const text = decodeTextRaw(buffer);
+
+      if (looksLikeBinaryText(text)) {
+        throw new Error("文件内容不是文本，可能已损坏或格式不支持");
+      }
+
+      return text;
+    }
+
     async function openLastBook() {
       let lastBookKey = null;
 
@@ -1380,7 +2271,57 @@
       const seq = ++loadSeq;
       loading.hidden = false;
 
+      // 打开新书前先回收上一本的章节图片。
+      releaseChapterImageUrls();
+
       try {
+        // epub 在 books 表里存的是压缩包原始字节，直接 decodeText 会得到乱码，
+        // 所以必须先看 meta 的 format。
+        const metas = await getAllBookMeta();
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        const meta = metas.find((item) => item.bookKey === lastBookKey);
+
+        if (meta?.format === "epub") {
+          const chapters = await getChapters(lastBookKey);
+
+          if (seq !== loadSeq) {
+            return;
+          }
+
+          if (!chapters || chapters.length === 0) {
+            removeSetting(LAST_BOOK_KEY);
+            readingContent.textContent = "";
+            return;
+          }
+
+          currentChapters = chapters;
+          currentBookIsEpub = true;
+
+          // 第一章可能是封面页/版权页，自动跳到第一个有文字的章节。
+          const firstTextIndex = findFirstTextChapter(chapters);
+
+          currentChapterIndex = firstTextIndex;
+          currentBookKey = lastBookKey;
+          await renderEpubChapter(chapters[firstTextIndex], lastBookKey);
+
+          if (seq !== loadSeq) {
+            return;
+          }
+
+          showReaderView();
+          syncEpubUiVisibility();
+          updateChapterNav();
+          window.scrollTo(0, 0);
+
+          // 章节已经就绪，可以按「第几章 + 章内比例」恢复。
+          await applySavedPos(lastBookKey, getSavedPos(lastBookKey), seq);
+          return;
+        }
+
         const buffer = await getBook(lastBookKey);
 
         if (seq !== loadSeq) {
@@ -1393,12 +2334,17 @@
           return;
         }
 
+        currentChapters = null;
+        currentChapterIndex = 0;
+        currentBookIsEpub = false;
+
         const text = decodeText(buffer);
         setReadingText(text);
         currentBookKey = lastBookKey;
         showReaderView();
+        syncEpubUiVisibility();
         window.scrollTo(0, 0);
-        restoreReadingProgress(lastBookKey, seq);
+        await applySavedPos(lastBookKey, getSavedPos(lastBookKey), seq);
       } catch (error) {
         if (seq !== loadSeq) {
           return;
@@ -1417,20 +2363,64 @@
 
     fontSizeInput.addEventListener("input", () => {
       root.style.setProperty("--font-size", `${fontSizeInput.value}px`);
+      // 给书页单独一套变量，避免被书里的 CSS 干扰；会穿透 Shadow DOM。
+      root.style.setProperty(
+        "--reader-font-size",
+        `${fontSizeInput.value}px`
+      );
       saveSetting("reader.fontSize", fontSizeInput.value);
     });
 
     themeToggle.addEventListener("click", () => {
       const isDark = root.classList.toggle("dark");
+      root.style.setProperty(
+        "--reader-color",
+        isDark ? "#d8d8d8" : "#2b2b2b"
+      );
       saveSetting("reader.theme", isDark ? "dark" : "light");
     });
 
     window.addEventListener(
       "scroll",
       () => {
+        // 离开阅读视图或正在恢复位置时，浏览器会重置滚动位置并触发 scroll，
+        // 必须忽略，否则会把刚存好的位置覆盖成 0。
+        if (
+          isLeavingReader ||
+          isRestoringPos ||
+          document.body.dataset.view !== "reader"
+        ) {
+          return;
+        }
+
+        if (currentBookKey === null) {
+          return;
+        }
+
+        // 在滚动发生的当下就算出比例，只把写入延后防抖。
+        const scrollElement = getScrollElement();
+        const maxScroll = scrollElement.scrollHeight - window.innerHeight;
+        const ratio =
+          maxScroll > 0 ? scrollElement.scrollTop / maxScroll : 0;
+        const bookKey = currentBookKey;
+        const pos = {
+          chapter: currentChapterIndex,
+          ratio,
+        };
+
         clearTimeout(progressSaveTimer);
         progressSaveTimer = setTimeout(() => {
-          saveReadingProgress();
+          // 200ms 内可能已经切视图、或开始恢复上次位置。到点再确认一次，
+          // 否则会把中间态的 0 写进去，覆盖刚恢复好的位置。
+          if (
+            isLeavingReader ||
+            isRestoringPos ||
+            document.body.dataset.view !== "reader"
+          ) {
+            return;
+          }
+
+          saveSetting(getPosKey(bookKey), JSON.stringify(pos));
         }, 200);
       },
       { passive: true }
@@ -1444,19 +2434,26 @@
           return;
         }
 
+        // 先解码校验再落库：二进制文件被 decodeText 拒绝时不该留下孤儿字节。
+        const text = decodeText(buffer);
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
         await putBook(bookKey, buffer);
 
         if (seq !== loadSeq) {
           return;
         }
 
-        const text = decodeText(buffer);
         const now = Date.now();
         const meta = {
           bookKey,
           name: file.name,
           size: file.size,
           chars: text.length,
+          chapterCount: 1,
           addedAt: now,
           lastReadAt: now,
         };
@@ -1471,16 +2468,19 @@
 
         setReadingText(text);
         currentBookKey = bookKey;
+        currentChapters = null;
+        currentChapterIndex = 0;
+        currentBookIsEpub = false;
         saveSetting(LAST_BOOK_KEY, bookKey);
         showReaderView();
+        syncEpubUiVisibility();
         window.scrollTo(0, 0);
-        restoreReadingProgress(bookKey, seq);
       } catch (error) {
         if (seq !== loadSeq) {
           return;
         }
 
-        readingContent.textContent = "文件读取或存储失败，请重新选择。";
+        readingContent.textContent = `导入失败：${error.message}`;
         console.error(error);
       } finally {
         if (seq === loadSeq) {
@@ -1491,6 +2491,12 @@
     }
 
     async function importEpubFile(file, seq, bookKey) {
+      // 任何一步失败，前面写进去的都要清掉：半成品会出现在书架上，
+      // 点开却报错，比完全没有更难排查。
+      let wroteBook = false;
+      let wroteChapters = false;
+      let wroteResources = false;
+
       try {
         const info = await NovelEpub.inspectEpub(file);
 
@@ -1499,6 +2505,19 @@
         }
 
         const chapterData = await NovelEpub.getChapters(file);
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        const images = await NovelEpub.getAllImages(file);
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        // 书自带的 CSS 和字体也要存下来，渲染章节时注入 Shadow DOM。
+        const assets = await NovelEpub.getAssets(file);
 
         if (seq !== loadSeq) {
           return;
@@ -1516,13 +2535,35 @@
           return;
         }
 
+        // 写入顺序固定：books → chapters → resources → meta。
         await putBook(bookKey, buffer);
+        wroteBook = true;
 
         if (seq !== loadSeq) {
           return;
         }
 
         await putChapters(bookKey, chapterData.chapters);
+        wroteChapters = true;
+
+        if (seq !== loadSeq) {
+          return;
+        }
+
+        // 图片、字体、CSS 一起写进 resources（同一个 store，两种 value 形状）。
+        await putResources(bookKey, [
+          ...images,
+          ...assets.fonts.map((font) => ({
+            path: font.href,
+            blob: font.blob,
+            mediaType: font.mediaType,
+          })),
+          ...assets.css.map((sheet) => ({
+            path: sheet.href,
+            text: sheet.text,
+          })),
+        ]);
+        wroteResources = true;
 
         if (seq !== loadSeq) {
           return;
@@ -1535,6 +2576,10 @@
           size: file.size,
           format: "epub",
           chars: chapterData.chars,
+          chapterCount: chapterData.chapters.length,
+          imageCount: images.length,
+          styleCount: assets.css.length,
+          fontCount: assets.fonts.length,
           author: info.author || "",
           cover: cover ? cover.blob : null,
           readingMode: "chapter",
@@ -1560,6 +2605,23 @@
           return;
         }
 
+        // 回滚已写入的部分，避免留下半成品。
+        try {
+          if (wroteResources) {
+            await deleteResources(bookKey);
+          }
+
+          if (wroteChapters) {
+            await deleteChapters(bookKey);
+          }
+
+          if (wroteBook) {
+            await deleteBook(bookKey);
+          }
+        } catch (cleanupError) {
+          console.error(cleanupError);
+        }
+
         showToast("解析失败：" + error.message);
         console.error(error);
       } finally {
@@ -1582,7 +2644,7 @@
       const bookKey = `${file.name}::${file.size}`;
 
       clearTimeout(progressSaveTimer);
-      saveReadingProgress();
+      saveReadingPos();
       currentBookKey = null;
       showLoadingState();
 
