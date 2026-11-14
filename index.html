@@ -142,8 +142,8 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: var(--space-2) var(--space-3);
-      padding: var(--space-3) var(--space-4);
+      gap: var(--space-2);
+      padding: var(--space-2) var(--space-3);
       background: var(--surface-1);
       border-bottom: 1px solid var(--border-subtle);
     }
@@ -158,7 +158,7 @@
     }
 
     .font-size-slider {
-      width: min(140px, 40vw);
+      width: 90px;
       accent-color: var(--accent);
       cursor: pointer;
     }
@@ -231,18 +231,17 @@
     max-width: 720px;
     min-height: 60vh;
     margin: 0 auto;
-    padding: 48px 40px 96px;
-    border-radius: 12px;
+    padding: 20px 16px 48px;
+    border-radius: 0;
     color: var(--text-primary);
     background: var(--surface-1);
-    box-shadow: 0 4px 24px rgba(50, 40, 20, 0.08);
     font-size: var(--font-size);
     line-height: 1.9;
     letter-spacing: 0.01em;
     white-space: normal;
     overflow-wrap: anywhere;
     text-align: justify;
-  } 
+  }
   .reading-content p {
   margin: 0 0 0.7em;
   text-indent: 2em;
@@ -301,7 +300,7 @@
     .loading {
       max-width: 720px;
       margin: 20px auto 0;
-      padding: 0 32px;
+      padding: 0 16px;
       color: var(--fg);
       font-size: 13px;
       line-height: 1.8;
@@ -314,42 +313,207 @@
     }
 
     .shelf {
-      max-width: 720px;
       margin: 20px auto 0;
-      padding: 0 32px;
+      padding: 0 12px;
+    }
+
+    /* 顶部分组 tab + 搜索框。关 4 会把它变成左侧竖栏，所以必须是独立容器。 */
+    .shelf-controls {
+      display: flex;
+      align-items: center;
+      /* 图标组靠右：tab 移进分类面板后，收起态只剩图标组一个可见子元素，
+         space-between 会把它顶到左边，所以用 flex-end。 */
+      justify-content: flex-end;
+      gap: var(--space-3);
+      margin-bottom: var(--space-4);
+      flex-wrap: wrap;
+      /* tab 行和搜索栏高度接近，切换时不跳动 */
+      min-height: 36px;
+    }
+
+    /* 搜索展开态的横条：默认隐藏，加 .is-searching 后占满整行。 */
+    .shelf-search-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      flex: 1;
+      min-width: 0;
+    }
+
+    .shelf-search-bar[hidden] {
+      display: none;
+    }
+
+    /* 分组 tab 现在住在分类面板里：竖排、整行可点。 */
+    .shelf-tabs {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      width: 100%;
+    }
+
+    .shelf-tab {
+      position: relative;
+      width: 100%;
+      padding: 9px 14px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      font: inherit;
+      font-size: var(--text-sm);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .shelf-tab:hover {
+      background: var(--surface-2);
+      color: var(--text-primary);
+    }
+
+    .shelf-tab.is-active {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .shelf-tab:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+
+    /* ---- 分类（漏斗）弹出面板 ---- */
+    .shelf-filter-wrap {
+      position: relative;
+    }
+
+    .shelf-filter-panel {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 15; /* 高于书架内容，低于 .toc-panel 的 20 */
+      min-width: 168px;
+      padding: 6px;
+      background: var(--surface-1);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      box-shadow: 0 10px 28px rgba(50, 40, 20, 0.18);
+    }
+
+    .shelf-filter-panel[hidden] {
+      display: none;
+    }
+
+    /* 漏斗三条横杠：默认跟搜索/更多一样用 currentColor，
+       使用了分类筛选（组不是「全部」）后由 .is-filtered 改成黄色，
+       提醒当前列表不是全量。 */
+    .shelf-filter .filter-bar {
+      fill: currentColor;
+    }
+
+    .shelf-filter.is-filtered .filter-bar {
+      fill: #f2c14e;
+    }
+
+    /* 搜索展开态的输入框：下划线样式（对齐设计稿），大字号。 */
+    .shelf-search {
+      flex: 1;
+      min-width: 0;
+      padding: 4px 2px;
+      border: 0;
+      border-bottom: 2px solid var(--border-strong);
+      border-radius: 0;
+      background: transparent;
+      color: var(--text-primary);
+      font: inherit;
+      font-size: 18px;
+    }
+
+    .shelf-search::placeholder {
+      color: var(--text-muted);
+    }
+
+    .shelf-search:focus {
+      outline: none;
+      /* 焦点指示：下划线变主题色 */
+      border-bottom-color: var(--accent);
+    }
+
+    /* 右侧功能图标组。 */
+    .shelf-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+    }
+
+    .shelf-action {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .shelf-action:hover {
+      background: var(--surface-2);
+      color: var(--text-primary);
+    }
+
+    .shelf-action:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+
+    /* 搜索展开态的布局切换：
+       藏 tab 和放大镜，露出「返回箭头 + 输入框」，占满整行。 */
+    .shelf-controls.is-searching .shelf-tabs {
+      display: none;
+    }
+
+    .shelf-controls.is-searching #shelf-search-bar {
+      display: flex;
+    }
+
+    .shelf-controls.is-searching #shelf-search-toggle {
+      display: none;
     }
 
      .shelf-list {
+      /* 列数用变量驱动，断点阶梯在文件后面的 min-width 媒体查询里。 */
+      --cols: 3;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-      gap: var(--space-3);
+      grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+      /* minmax 的 0 很关键：写成 1fr 时长书名会把列撑宽，导致列宽不等。 */
+      gap: 10px;
     }
 
     .shelf-item {
       position: relative;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: var(--space-1) var(--space-3);
-      width: 100%;
-      padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+      display: block;
+      padding: 0;
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-md);
+      /* 让封面的圆角跟着卡片走 */
+      overflow: hidden;
+      /* 书封的经典比例，格子自己撑高 */
+      aspect-ratio: 2 / 3;
+      background: var(--surface-2);
       color: var(--text-primary);
-      background: var(--surface-1);
       font: inherit;
       text-align: left;
       cursor: pointer;
       transition:
         transform var(--dur-fast) var(--ease),
-        border-color var(--dur-fast) var(--ease),
         box-shadow var(--dur-fast) var(--ease);
     }
 
     .shelf-item:hover {
-      transform: translateY(-1px);
-      border-color: var(--border-strong);
-      box-shadow: 0 6px 18px rgba(50, 40, 20, 0.08);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(50, 40, 20, 0.14);
     }
 
     .shelf-item:focus-visible {
@@ -357,106 +521,183 @@
       outline-offset: 2px;
     }
 
+    /* 封面铺满整个格子：img 和无图色块兜底共用这套定位。 */
     .shelf-cover {
-      flex: none;
-      display: grid;
-      place-items: center;
-      width: 40px;
-      height: 54px;
-      border-radius: var(--radius-sm);
-      color: #fff;
-      background: hsl(var(--cover-hue, 160) 32% 38%);
-      font-size: var(--text-lg);
-      font-weight: 500;
-      line-height: 1;
-    }
-
-    :root.dark .shelf-cover {
-      background: hsl(var(--cover-hue, 160) 28% 26%);
-      color: #e8e3d8;
-    }
-
-    /* 封面是图片时填满整块，不拉伸变形。 */
-    img.shelf-cover {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 0; /* 圆角交给 .shelf-item 的 overflow */
       object-fit: cover;
       display: block;
     }
 
-    .shelf-title {
+    /* 无封面时的色块兜底（不是 img 的那个 div）：首字居中、够大。 */
+    .shelf-cover:not(img) {
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: clamp(28px, 8vw, 48px);
+      font-weight: 500;
+      background: hsl(var(--cover-hue, 160) 32% 38%);
+    }
+
+    :root.dark .shelf-cover:not(img) {
+      background: hsl(var(--cover-hue, 160) 28% 26%);
+      color: #e8e3d8;
+    }
+
+    /* 底部信息层：书名 + 章节行包在一起，共享同一条渐变背景。 */
+    .shelf-caption {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 34px 7px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
       min-width: 0;
-      flex: 1 1 120px;
-      overflow: hidden;
-      font-size: var(--text-sm);
-      line-height: var(--leading-tight);
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .shelf-chars {
-      flex: none;
-      font-size: var(--text-xs);
-      color: var(--text-muted);
-      white-space: nowrap;
-    }
-
-    .shelf-progress {
-      flex: none;
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-2);
-      font-size: var(--text-xs);
-      color: var(--text-secondary);
-      font-variant-numeric: tabular-nums;
-      white-space: nowrap;
-    }
-
-    .shelf-progress::before {
-      content: "";
-      width: 44px;
-      height: 4px;
-      border-radius: 999px;
+      /* 点击穿透，别抢 item 的点击 */
+      pointer-events: none;
       background: linear-gradient(
-        to right,
-        var(--accent) var(--p, 0%),
-        var(--surface-2) var(--p, 0%)
+        to top,
+        rgba(0, 0, 0, 0.88) 0%,
+        rgba(0, 0, 0, 0.66) 38%,
+        rgba(0, 0, 0, 0.28) 72%,
+        rgba(0, 0, 0, 0) 100%
       );
+    }
+
+    /* 没有章节行时（单章书/没进度），把底部 padding 撑开给圆环让位。 */
+    .shelf-caption.caption-solo {
+      padding-bottom: 26px;
+    }
+
+    .shelf-title {
+      margin: 0;
+      padding: 0;
+      color: #fff;
+      font-size: 12px;
+      line-height: 1.32;
+      font-weight: 500;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      /* 必须覆盖原来的 nowrap */
+      white-space: normal;
+      word-break: break-word;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+
+    .shelf-chapter {
+      display: block;
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 10px;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      /* 给右下角圆环让位 */
+      padding-right: 24px;
+    }
+
+    .shelf-chapter[hidden] {
+      display: none;
+    }
+
+    /* 手机上不显示"上次读到"前缀，桌面端在下面放开。 */
+    .chapter-prefix {
+      display: none;
+    }
+
+    /* 圆形进度环。白色 + 阴影在深浅封面上都看得清，主色会被封面吃掉。 */
+    .shelf-ring {
+      position: absolute;
+      right: 5px;
+      bottom: 4px;
+      width: 20px;
+      height: 20px;
+      /* 从 12 点方向开始画 */
+      transform: rotate(-90deg);
+      pointer-events: none;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+    }
+
+    .shelf-ring[hidden] {
+      display: none;
+    }
+
+    .ring-track {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.32);
+      stroke-width: 3;
+    }
+
+    .ring-fill {
+      fill: none;
+      stroke: var(--ring-color, #fff);
+      stroke-width: 3;
+      stroke-linecap: round;
+      transition: stroke-dashoffset var(--dur-base) var(--ease);
+    }
+
+    /* 字数保留创建（列表视图要用），网格视图下不显示。 */
+    .shelf-chars {
+      display: none;
+    }
+
+    @media (min-width: 1024px) {
+      .shelf-ring {
+        width: 24px;
+        height: 24px;
+        right: 6px;
+        bottom: 5px;
+      }
+
+      .shelf-chapter {
+        font-size: 11px;
+        padding-right: 30px;
+        color: rgba(255, 255, 255, 0.82);
+      }
+
+      .chapter-prefix {
+        display: inline;
+      }
     }
 
     .shelf-delete {
       position: absolute;
-      top: var(--space-1);
-      right: var(--space-1);
+      top: 6px;
+      right: 6px;
+      z-index: 1; /* 盖在封面图上 */
       min-width: 28px;
       min-height: 24px;
       padding: 2px var(--space-2);
       border: 0;
       border-radius: var(--radius-sm);
-      color: var(--text-muted);
-      background: transparent;
+      /* 封面网格里下面是图片，灰字加透明底会看不见，改成常显标签。 */
+      color: #fff;
+      background: rgba(0, 0, 0, 0.45);
       font: inherit;
       font-size: var(--text-xs);
       cursor: pointer;
-      opacity: 0.5;
-      transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+      transition: opacity var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
     }
 
     .shelf-item:hover .shelf-delete,
     .shelf-item:focus-within .shelf-delete {
-      opacity: 1;
+      background: rgba(0, 0, 0, 0.65);
     }
 
     .shelf-delete:hover {
-      color: var(--text-primary);
-      background: var(--surface-2);
+      background: rgba(0, 0, 0, 0.8);
     }
 
     .shelf-delete:focus-visible {
       outline: 3px solid var(--focus-ring);
       outline-offset: 2px;
-    }
-    
-    .shelf-list {
-      grid-template-columns: 1fr;
     }
 
     /* 触屏没有 hover，删除按钮必须常亮 */
@@ -488,7 +729,7 @@
       z-index: 20; /* 必须高于 .toolbar 的 10 */
       display: flex;
       flex-direction: column;
-      width: min(320px, 85vw);
+      width: 100%;
       background: var(--surface-1);
       border-left: 1px solid var(--border-subtle);
       transform: translateX(100%);
@@ -596,7 +837,7 @@
     .chapter-nav {
       max-width: 720px;
       margin: 0 auto;
-      padding: 0 40px 96px;
+      padding: 0 16px 48px;
       display: flex;
       gap: var(--space-3);
     }
@@ -669,37 +910,61 @@
       pointer-events: none;
     }
 
-    @media (max-width: 600px) {
+    /* 断点体系统一为 min-width 递进式：基准是手机端，
+       往上逐级增强。不要混用 max-width，否则 600px 这个点上会重叠。 */
+    @media (min-width: 600px) {
       .toolbar {
-        padding: var(--space-2) var(--space-3);
-        gap: var(--space-2);
+        padding: var(--space-3) var(--space-4);
+        gap: var(--space-2) var(--space-3);
       }
 
       .font-size-slider {
-        width: 90px;
+        width: min(140px, 40vw);
       }
 
       .toc-panel {
-        width: 100%;
+        width: min(320px, 85vw);
       }
 
       .chapter-nav {
-        padding: 0 16px 48px;
+        padding: 0 40px 96px;
       }
-    }
 
       .reading-content {
-        padding: 20px 16px 48px;
-        border-radius: 0;
-        box-shadow: none;
+        padding: 48px 40px 96px;
+        border-radius: 12px;
+        box-shadow: 0 4px 24px rgba(50, 40, 20, 0.08);
       }
 
       .loading {
-        padding: 0 16px;
+        padding: 0 32px;
       }
 
       .shelf {
-        padding: 0 16px;
+        max-width: 1200px;
+        padding: 0 40px;
+      }
+
+      .shelf-list {
+        --cols: 4;
+        gap: var(--space-3);
+      }
+    }
+
+    @media (min-width: 900px) {
+      .shelf-list {
+        --cols: 5;
+        gap: var(--space-4);
+      }
+    }
+
+    @media (min-width: 1440px) {
+      .shelf {
+        max-width: 1600px;
+      }
+
+      .shelf-list {
+        --cols: 6;
       }
     }
   </style>
@@ -742,6 +1007,67 @@
   </div>
 
   <section id="shelf" class="shelf" aria-label="书架">
+    <div class="shelf-controls">
+      <!-- 搜索展开态：返回箭头 + 输入框，占满整行 -->
+      <div id="shelf-search-bar" class="shelf-search-bar" hidden>
+        <button id="shelf-search-back" class="shelf-action" type="button" aria-label="退出搜索">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <line x1="20" y1="12" x2="5" y2="12"></line>
+            <polyline points="11 5 4 12 11 19"></polyline>
+          </svg>
+        </button>
+        <input id="shelf-search" class="shelf-search" type="search"
+               placeholder="搜索..." aria-label="搜索书名" autocomplete="off" />
+      </div>
+
+      <!-- 右侧功能图标组：搜索 / 分类 / 更多。两个态都显示。 -->
+      <div class="shelf-actions">
+        <button id="shelf-search-toggle" class="shelf-action" type="button"
+                aria-label="搜索书名" aria-expanded="false">
+          <svg class="icon-search" viewBox="0 0 24 24" width="22" height="22"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+          </svg>
+        </button>
+
+        <!-- 分类：漏斗图标 + 弹出面板。面板里放原来的分组 tab。 -->
+        <div class="shelf-filter-wrap">
+          <button id="shelf-filter" class="shelf-action shelf-filter" type="button"
+                  aria-label="分类" aria-haspopup="true" aria-expanded="false">
+            <!-- 三条横杠用 currentColor：默认跟搜索/更多同色，
+                 使用了分类筛选后由 .is-filtered 改成黄色。 -->
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+              <rect class="filter-bar" x="3" y="4.5" width="18" height="2.6" rx="1.3"></rect>
+              <rect class="filter-bar" x="6" y="10" width="12" height="2.6" rx="1.3"></rect>
+              <rect class="filter-bar" x="9" y="15.5" width="6" height="2.6" rx="1.3"></rect>
+            </svg>
+          </button>
+          <!-- 分类面板：点漏斗弹出，内容是原来的「全部/在读/未读」分组 -->
+          <div id="shelf-filter-panel" class="shelf-filter-panel" hidden>
+            <div id="shelf-tabs" class="shelf-tabs" role="tablist" aria-label="书库分组">
+              <button class="shelf-tab is-active" type="button" role="tab"
+                      data-group="all" aria-selected="true">全部</button>
+              <button class="shelf-tab" type="button" role="tab"
+                      data-group="reading" aria-selected="false">在读</button>
+              <button class="shelf-tab" type="button" role="tab"
+                      data-group="unread" aria-selected="false">未读</button>
+            </div>
+          </div>
+        </div>
+
+        <button id="shelf-more" class="shelf-action" type="button" aria-label="更多">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
+            <circle cx="12" cy="5" r="2.2"></circle>
+            <circle cx="12" cy="12" r="2.2"></circle>
+            <circle cx="12" cy="19" r="2.2"></circle>
+          </svg>
+        </button>
+      </div>
+    </div>
     <div id="shelf-list" class="shelf-list"></div>
     <p id="shelf-empty" class="shelf-empty" hidden>
       还没有书，点上面导入一本
@@ -796,6 +1122,15 @@
     const chapterNav = document.getElementById("chapter-nav");
     const prevChapter = document.getElementById("prev-chapter");
     const nextChapter = document.getElementById("next-chapter");
+    const shelfTabs = document.getElementById("shelf-tabs");
+    const shelfSearch = document.getElementById("shelf-search");
+    const shelfControls = document.querySelector(".shelf-controls");
+    const shelfSearchBar = document.getElementById("shelf-search-bar");
+    const shelfSearchToggle = document.getElementById("shelf-search-toggle");
+    const shelfSearchBack = document.getElementById("shelf-search-back");
+    const shelfFilterButton = document.getElementById("shelf-filter");
+    const shelfFilterPanel = document.getElementById("shelf-filter-panel");
+    const shelfMoreButton = document.getElementById("shelf-more");
     const root = document.documentElement;
     let currentBookKey = null;
     // 当前打开这本书的章节数组；epub 章节切换要用。
@@ -812,6 +1147,12 @@
     let progressSaveTimer = null;
     let toastTimer = null;
     let loadSeq = 0;
+    // 书架渲染的并发守卫：renderShelf 里有多个 await 点（读 meta、读章节），
+    // 快速切换时旧一轮渲染可能慢于新一轮，旧结果会覆盖新的。
+    let shelfRenderSeq = 0;
+    // 书架筛选状态：分组 tab 和搜索框共用，统一走 renderShelf。
+    let shelfFilter = { group: "all", keyword: "" };
+    let shelfSearchTimer = null;
     // 书架封面的 objectURL 不会自己释放，每次重建 DOM 前必须全部 revoke。
     let shelfCoverUrls = [];
     // 当前章节里图片的 objectURL，切章时要统一回收。
@@ -1298,11 +1639,40 @@
       shelfCoverUrls = [];
     }
 
+    // 书架筛选：分组 tab + 搜索框共用这一条规则。
+    function matchesShelfFilter(meta) {
+      if (shelfFilter.group === "reading" || shelfFilter.group === "unread") {
+        const pos = getSavedPos(meta.bookKey);
+        const started = Boolean(pos) && (pos.chapter > 0 || pos.ratio > 0);
+        if (shelfFilter.group === "reading" && !started) return false;
+        if (shelfFilter.group === "unread" && started) return false;
+      }
+
+      if (shelfFilter.keyword) {
+        const name = String(meta.name ?? "")
+          .replace(/\.(txt|epub)$/i, "")
+          .toLowerCase();
+        if (!name.includes(shelfFilter.keyword.toLowerCase())) return false;
+      }
+
+      return true;
+    }
+
     async function renderShelf() {
+      const seq = ++shelfRenderSeq;
+
       try {
         // 书架只对 meta 调用 getAll；绝不能对 books 调用 getAll：
         // 会把所有正文一次性读进内存，20 本 5MB 的书就是 100MB。
-        const metas = await getAllBookMeta();
+        const allMetas = await getAllBookMeta();
+
+        // 有更新的渲染在跑，本次作废。此时还没创建任何 URL，直接退即可。
+        if (seq !== shelfRenderSeq) {
+          return;
+        }
+
+        // 过滤在排序之前：排序只对要显示的书做。
+        const metas = allMetas.filter((meta) => matchesShelfFilter(meta));
 
         metas.sort(
           (first, second) =>
@@ -1312,20 +1682,23 @@
 
         releaseShelfCoverUrls();
         shelfList.replaceChildren();
-        shelfEmpty.hidden = metas.length > 0;
+        // 空状态只看"有没有书"：搜不到结果时不能显示"还没有书"，
+        // 用户明明有书，只是没搜到。两种空状态要分开。
+        shelfEmpty.hidden = allMetas.length > 0;
 
         for (const meta of metas) {
           // 书名是用户可控内容，必须使用 createElement + textContent，禁止 innerHTML 拼接，避免 XSS。
           const item = document.createElement("div");
           const title = document.createElement("span");
           const chars = document.createElement("span");
-          const progress = document.createElement("span");
+          const chapterEl = document.createElement("span");
+          // 类名必须无条件设置：showChapter 为 false 时靠它命中
+          // .shelf-chapter[hidden] 规则，否则 hidden 特性拦不住显示。
+          chapterEl.className = "shelf-chapter";
+          const caption = document.createElement("div");
           const deleteButton = document.createElement("button");
           const pos = getSavedPos(meta.bookKey);
           const chapterCount = Number(meta.chapterCount) || 1;
-          const percent = pos
-            ? (pos.chapter + pos.ratio) / chapterCount
-            : 0;
           const charCount = Number(meta.chars) || 0;
 
           item.className = "shelf-item";
@@ -1338,14 +1711,100 @@
             ""
           );
 
+          // 保留创建（列表视图要用字数），网格视图下用 CSS 藏掉。
           chars.className = "shelf-chars";
           chars.textContent = `${charCount.toLocaleString("zh-CN")} 字`;
 
-          progress.className = "shelf-progress";
-          progress.textContent = `${Math.round(percent * 100)}%`;
+          // ---- 章节行 + 圆环 ----
+          // 单章书（txt 的 meta.chapterCount 写死 1）不显示章节行：
+          // 显示它等于告诉用户"这本有目录可翻"，点进去发现翻不动。
+          // 用 chapterCount 而不是"章名取不到"来判断：后者会把
+          // epub 解析出问题的 bug 一起藏掉。
+          const isSingleChapter = chapterCount <= 1;
+          let ringRatio = 0;
+          let hasProgress = false;
+          let showChapter = false;
 
-          // 封面块：有封面图就用图片；否则退回书名首字 + 书名决定的色相。
-          // 进度条比例通过 --p 传给 CSS。
+          if (pos) {
+            hasProgress = pos.chapter > 0 || pos.ratio > 0;
+            ringRatio = Math.min(1, Math.max(0, Number(pos.ratio) || 0));
+
+            showChapter = hasProgress && !isSingleChapter;
+
+            if (showChapter) {
+              // 章节列表从 IndexedDB 拿（导入时存的），不是解压 EPUB。
+              const chapters = await getChapters(meta.bookKey);
+
+              // await 之后必须检查：快速切换时旧一轮渲染不能覆盖新的。
+              // 注意这里【不能】调 releaseShelfCoverUrls：新一轮渲染
+              // 开头已经回收过旧 URL，此刻共享数组里放的是它的新 URL，
+              // 再回收一次会把它的封面全部打裂。直接退即可，不泄漏
+              // ——本渲染创建 URL 都在挂起之前，新一轮的回收已经覆盖。
+              if (seq !== shelfRenderSeq) {
+                return;
+              }
+
+              // pos.chapter 是 0-based 数组索引，tooltip 里的序号显示要 +1。
+              const chapterNo = pos.chapter + 1;
+              const chapterName = chapters?.[pos.chapter]?.title ?? "";
+
+              // 章名大多自带「第 N 章」，再显示一遍序号是重复（
+              // 会变成「第 6 章 · 第三章 魔法影像」），所以只显示章名。
+              // 拿不到章名就只剩「上次读到」，没有信息量，整行隐藏。
+              if (!chapterName) {
+                showChapter = false;
+              } else {
+                const prefix = document.createElement("span");
+                prefix.className = "chapter-prefix";
+                prefix.textContent = "上次读到 ";
+
+                // 章名来自文件，可能含 < > &，必须用 textContent/createTextNode。
+                chapterEl.append(prefix);
+                chapterEl.append(
+                  document.createTextNode(`· ${chapterName}`)
+                );
+                // 序号挪到悬停提示里，不占卡片版面。
+                chapterEl.title = `第 ${chapterNo} 章 ${chapterName}　本章 ${Math.round(
+                  ringRatio * 100
+                )}%`;
+              }
+            }
+          }
+
+          chapterEl.hidden = !showChapter;
+
+          // ---- 圆形进度环：必须 createElementNS，SVG 元素不在 HTML 命名空间 ----
+          const SVG_NS = "http://www.w3.org/2000/svg";
+          const RING_R = 7;
+          const RING_C = 2 * Math.PI * RING_R;
+
+          const ring = document.createElementNS(SVG_NS, "svg");
+          ring.setAttribute("class", "shelf-ring");
+          ring.setAttribute("viewBox", "0 0 20 20");
+          ring.setAttribute("aria-hidden", "true");
+
+          const trackCircle = document.createElementNS(SVG_NS, "circle");
+          trackCircle.setAttribute("class", "ring-track");
+          trackCircle.setAttribute("cx", "10");
+          trackCircle.setAttribute("cy", "10");
+          trackCircle.setAttribute("r", String(RING_R));
+
+          const fillCircle = document.createElementNS(SVG_NS, "circle");
+          fillCircle.setAttribute("class", "ring-fill");
+          fillCircle.setAttribute("cx", "10");
+          fillCircle.setAttribute("cy", "10");
+          fillCircle.setAttribute("r", String(RING_R));
+          fillCircle.style.strokeDasharray = String(RING_C);
+          fillCircle.style.strokeDashoffset = String(RING_C * (1 - ringRatio));
+
+          ring.append(trackCircle, fillCircle);
+          if (!hasProgress) {
+            // SVGElement 没有 hidden 的 IDL 属性，直接赋值不会变成特性，
+            // CSS 的 [hidden] 规则也就拦不住它显示。必须用 setAttribute。
+            ring.setAttribute("hidden", "");
+          }
+
+          // ---- 封面 ----
           let cover;
 
           if (meta.cover instanceof Blob) {
@@ -1369,21 +1828,27 @@
             );
           }
 
-          progress.style.setProperty("--p", progress.textContent);
+          // ---- 组装 ----
+          // 书名和章节行包在一起：共享同一条渐变背景，一起给圆环让位。
+          caption.className = "shelf-caption";
+          caption.append(title, chapterEl);
+
+          // 没有章节行时，书名会往下压到圆环位置被盖住，
+          // 把 caption 的底部 padding 从 6px 撑到 26px。
+          if (!showChapter) {
+            caption.classList.add("caption-solo");
+          }
+
           item.prepend(cover);
-
-          deleteButton.type = "button";
-          deleteButton.className = "shelf-delete";
-          deleteButton.textContent = "删";
-          deleteButton.setAttribute("aria-label", `删除 ${title.textContent}`);
-          deleteButton.addEventListener("click", (event) => {
-            event.stopPropagation();
-            deleteShelfBook(meta.bookKey);
-          });
-
-          item.append(title, chars, progress, deleteButton);
+          item.append(caption, ring, deleteButton);
           item.dataset.bookKey = String(meta.bookKey ?? "");
           shelfList.append(item);
+        }
+
+        // 筛选/搜索后结果可能只剩一两本，视口别停在空白处。
+        // 只在书架视图滚；阅读视图里调 renderShelf 的场景不受影响。
+        if (seq === shelfRenderSeq && document.body.dataset.view === "shelf") {
+          window.scrollTo(0, 0);
         }
       } catch (error) {
         releaseShelfCoverUrls();
@@ -1392,6 +1857,125 @@
         console.error(error);
       }
     }
+
+    // 分组 tab 切换：事件委托挂在容器上，第 8 节加分关再加 tab 时不用改这里。
+    // 分类面板的开合。
+    function openFilterPanel() {
+      shelfFilterPanel.hidden = false;
+      shelfFilterButton.setAttribute("aria-expanded", "true");
+    }
+
+    function closeFilterPanel() {
+      shelfFilterPanel.hidden = true;
+      shelfFilterButton.setAttribute("aria-expanded", "false");
+    }
+
+    async function setShelfGroup(group) {
+      shelfFilter.group = group;
+
+      shelfTabs.querySelectorAll(".shelf-tab").forEach((tab) => {
+        const on = tab.dataset.group === group;
+        tab.classList.toggle("is-active", on);
+        tab.setAttribute("aria-selected", on ? "true" : "false");
+      });
+
+      // 漏斗颜色跟随筛选状态：「全部」恢复灰色，其它分组变黄色，
+      // 提醒当前书架列表不是全量。
+      shelfFilterButton.classList.toggle("is-filtered", group !== "all");
+
+      await renderShelf();
+    }
+
+    shelfTabs.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const tab = event.target.closest(".shelf-tab");
+
+      if (!tab) {
+        return;
+      }
+
+      // 选完分组就收起面板，别挡住下面的书架。
+      closeFilterPanel();
+      setShelfGroup(tab.dataset.group);
+    });
+
+    // 点漏斗开 / 关分类面板。
+    shelfFilterButton.addEventListener("click", () => {
+      if (shelfFilterPanel.hidden) {
+        openFilterPanel();
+      } else {
+        closeFilterPanel();
+      }
+    });
+
+    // 点面板外面收起分类面板（标准弹层行为）。
+    document.addEventListener("click", (event) => {
+      if (
+        !shelfFilterPanel.hidden &&
+        event.target instanceof Element &&
+        !event.target.closest(".shelf-filter-wrap")
+      ) {
+        closeFilterPanel();
+      }
+    });
+
+    // 搜索必须防抖：renderShelf 会整列表重建、逐本 createObjectURL 解码封面，
+    // 输入"魔法少女"四个字触发 4 次全量重建——图片闪、输入卡、手机掉帧。
+    shelfSearch.addEventListener("input", () => {
+      shelfFilter.keyword = shelfSearch.value.trim();
+      clearTimeout(shelfSearchTimer);
+      shelfSearchTimer = setTimeout(() => {
+        renderShelf();
+      }, 200);
+    });
+
+    // ---- 搜索展开 / 收起 ----
+
+    // 收起时清掉关键字，列表恢复未筛选状态。
+    // 留着关键字的话，筛选条件会藏在一个看不见的输入框里，用户会以为书丢了。
+    function collapseShelfSearch() {
+      shelfControls.classList.remove("is-searching");
+      shelfSearchBar.hidden = true;
+      shelfSearchToggle.setAttribute("aria-expanded", "false");
+
+      if (shelfFilter.keyword !== "") {
+        shelfFilter.keyword = "";
+        shelfSearch.value = "";
+        clearTimeout(shelfSearchTimer);
+        renderShelf();
+      }
+    }
+
+    // 点放大镜：进入搜索态，焦点直接进输入框。
+    shelfSearchToggle.addEventListener("click", () => {
+      shelfControls.classList.add("is-searching");
+      shelfSearchBar.hidden = false;
+      shelfSearchToggle.setAttribute("aria-expanded", "true");
+      // 进搜索态时把分类面板收起来，别让两个浮层同时开着。
+      closeFilterPanel();
+      shelfSearch.focus();
+    });
+
+    // 点返回箭头或按 Esc：退出搜索态。
+    shelfSearchBack.addEventListener("click", collapseShelfSearch);
+
+    shelfSearch.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        collapseShelfSearch();
+      }
+    });
+
+    // ---- 分类 / 更多：占位按钮，功能后续接入 ----
+    shelfFilterButton.addEventListener("click", () => {
+      showToast("分类功能开发中");
+    });
+
+    shelfMoreButton.addEventListener("click", () => {
+      showToast("更多功能开发中");
+    });
 
     async function openShelfBook(bookKey) {
       // 切换视图会隐藏正文并改变布局，必须在离开阅读视图前保存当前进度。
