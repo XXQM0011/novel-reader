@@ -22,7 +22,24 @@ https://xxqm0011.github.io/novel-reader/
 - 删除书籍，同时清理本地正文、元数据和阅读进度。
 
 ## 技术栈
-原生 JavaScript + IndexedDB + localStorage，单文件 `index.html`（1375 行），无框架、无构建步骤。
+原生 JavaScript + IndexedDB + localStorage，单文件 `index.html`，无框架、无构建步骤。
+
+### 存储结构
+
+IndexedDB 库 `reader`，四个 object store，全部使用外部 key（无 keyPath）：
+
+| store | key | value |
+|---|---|---|
+| `books` | bookKey | 原始文件字节（ArrayBuffer） |
+| `meta` | bookKey | 书目信息（书名、字数、章数、封面等） |
+| `chapters` | bookKey | 章节数组（每章含 html / text / chars） |
+| `resources` | `${bookKey}::${path}` | 见下 |
+
+**`resources` store 同时存两种东西**：二进制的图片/字体（value 为 `{ blob, mediaType }`）
+和文本的 CSS（value 为 `{ text }`）。读取时按有没有 `blob` 字段区分。
+
+这是有意的妥协：再开一个 store 的成本（删书要清 5 处）大于收益。代价是 store 的语义不够纯，
+改这块代码时要记得两种 value 形状并存。
 
 ## 已知限制
 - 书籍正文和阅读进度只保存在当前浏览器的本地存储中，更换设备、浏览器或清除站点数据后不会恢复。

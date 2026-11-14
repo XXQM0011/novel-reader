@@ -230,17 +230,71 @@ async function readTocTitles(bytes, entries, opfDir, manifest) {
   return titles;
 }
 
+// 把章节 HTML 里的资源引用改写成「相对 opfDir」的路径。
+function rewriteResourcePaths(html, chapterHref) {
+  const chapterDir = dirnamePosix(chapterHref);
+  const resolve = (value) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
+    // 不处理外链、data:、已是绝对 URL 的
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(raw)) return raw;
+    // 开头的 / 指 zip 根，不是章节所在目录，去掉斜杠后不能再拼 chapterDir。
+    if (raw.startsWith("/")) return joinPosix("", raw.replace(/^\/+/, ""));
+    return joinPosix(chapterDir, raw);
+  };
+
+  // 用 DOMParser 当 html 解析（不是 xml），宽容度更高
+  const doc = new DOMParser().parseFromString(
+    `<body>${html}</body>`,
+    "text/html"
+  );
+  for (const img of doc.querySelectorAll("img[src]")) {
+    img.setAttribute("src", resolve(img.getAttribute("src")));
+  }
+  // SVG 里的图片是 <image xlink:href>，必须单独处理，否则只显示空白
+  for (const image of doc.querySelectorAll("image")) {
+    const href = image.getAttribute("xlink:href") ?? image.getAttribute("href");
+    if (href) {
+      image.setAttribute("xlink:href", resolve(href));
+      image.setAttribute("href", resolve(href));
+    }
+  }
+  // 去掉 srcset（多数阅读器无法可靠处理多分辨率，先不管）
+  for (const el of doc.querySelectorAll("[srcset]")) {
+    el.removeAttribute("srcset");
+  }
+  return doc.body.innerHTML;
+}
+
 // 读取章节正文并生成兜底标题。
-async function readChapterContent(bytes, entries, path, index) {
+// href 是相对 opfDir 的路径，内部拼成相对 zip 根的 path。
+async function readChapterContent(bytes, entries, opfDir, href, index) {
+  const path = joinPosix(opfDir, href);
   const document = parseXml(
     await readTextEntry(bytes, entries, path),
     path
   );
   const body = document.getElementsByTagName("body")[0];
-  const text = (body?.textContent ?? "").replace(/[\s\u3000]+/g, "");
+  // 原始 HTML 用来渲染；资源路径改写成相对 opfDir。
+  const html = rewriteResourcePaths(body?.innerHTML ?? "", href);
+  // 保留分段：每行内部压缩空白，行首尾去掉，丢弃空行，行间用 \n 连接。
+  // setReadingText 按 \n 切段，正好对上。
+  const rawText = body?.textContent ?? "";
+  const text = rawText
+    .split(/\r?\n/)
+    .map((line) => line.replace(/[\s\u3000]+/g, " ").trim())
+    .filter((line) => line.length > 0)
+    .join("\n");
+  // 字数统计要的是不含空白的字数，与显示用的 text 区分开。
+  const charCount = text.replace(/[\s\u3000]/g, "").length;
   const heading = elementText(document.getElementsByTagName("h1")[0]);
   const pageTitle = elementText(document.getElementsByTagName("title")[0]);
-  return { text, fallbackTitle: heading || pageTitle || `第 ${index + 1} 章` };
+  return {
+    html,
+    text,
+    charCount,
+    fallbackTitle: heading || pageTitle || `第 ${index + 1} 章`,
+  };
 }
 
 // 严格按 spine 顺序读取全部章节正文。
@@ -259,13 +313,21 @@ async function getChapters(file) {
     if (!item) throw new Error(`spine 缺少 manifest 项：${spineIds[index]}`);
     const href = stripHash(item.href);
     const path = joinPosix(opfDir, href);
-    const content = await readChapterContent(bytes, entries, path, index);
+    const content = await readChapterContent(
+      bytes,
+      entries,
+      opfDir,
+      href,
+      index
+    );
     chapters.push({
       title: titles.get(path) || content.fallbackTitle,
       href,
+      html: content.html,
       text: content.text,
+      chars: content.charCount,
     });
-    chars += content.text.length;
+    chars += content.charCount;
   }
   return { chapters, chars };
 }
@@ -299,6 +361,28 @@ async function getCover(file) {
   const path = joinPosix(opfDir, stripHash(item.href));
   const data = await readEntryBytes(bytes, entries, path);
   return { blob: new Blob([data], { type: item.type }), mediaType: item.type };
+}
+
+// 读取 manifest 里的全部图片。
+// 用 manifest 而不是扫 html 找引用：src 可能藏在 CSS 的 url()、SVG 的 <image>
+// 甚至 @import 的样式表里，逐个 grep 一定会漏。
+async function getAllImages(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const entries = readZipDirectory(bytes);
+  const { opf, opfDir } = await readPackageDocuments(bytes, entries);
+  const images = [];
+  for (const item of readManifest(opf)) {
+    if (!item.type.toLowerCase().startsWith("image/")) continue;
+    const path = joinPosix(opfDir, stripHash(item.href));
+    if (!entries.has(path)) continue; // manifest 里有但 zip 里没有，跳过别抛
+    const data = await readEntryBytes(bytes, entries, path);
+    images.push({
+      path: stripHash(item.href), // 相对 opfDir，跟 html 里的 src 对上
+      mediaType: item.type,
+      blob: new Blob([data], { type: item.type }),
+    });
+  }
+  return images;
 }
 
 // 判断 manifest 项是否为字体资源。
@@ -374,6 +458,18 @@ function renderChapter(container, chapterHtml, scopedCss) {
       :host { display:block; padding:16px; }
       .book-body { font-size: var(--reader-font-size, 18px); color: var(--reader-color, #333); }
       .book-body img { max-width:100%; height:auto; }
+      /* 书的 CSS 常把字号/颜色硬编码到 p、div 等子元素上（如 p { font-size:12px;
+         color:#000 }），只设 .book-body 压不住，暗色模式下会变成黑字看不清。
+         字号和颜色是用户直接控制的，用 !important 兜底；行高跟着字号走。 */
+      .book-body,
+      .book-body p,
+      .book-body div,
+      .book-body li,
+      .book-body span {
+        font-size: var(--reader-font-size, 18px) !important;
+        color: var(--reader-color, #333) !important;
+      }
+      .book-body { line-height: 1.8 !important; }
     </style>
     <div class="book-body">${chapterHtml}</div>
   `;
@@ -400,8 +496,12 @@ window.NovelEpub = {
   inspectEpub,
   getChapters,
   getCover,
+  getAllImages,
   getAssets,
   scopeCss,
   renderChapter,
+  rewriteResourcePaths,
+  joinPosix,
+  dirnamePosix,
 };
 })();
