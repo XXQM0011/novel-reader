@@ -152,7 +152,7 @@
       display: flex;
       align-items: center;
       gap: var(--space-2);
-      margin-left: auto; /* 把字号和它右边的控件一起推到右边 */
+      /* 在阅读工具栏里居中排布，不再需要 margin-left:auto 推右 */
       color: var(--text-secondary);
       font-size: var(--text-sm);
     }
@@ -414,6 +414,178 @@
       fill: #f2c14e;
     }
 
+    /* 更多菜单：和分类面板同一套弹出样式。 */
+    .shelf-more-wrap {
+      position: relative;
+    }
+
+    .shelf-more-panel {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 15;
+      min-width: 150px;
+      padding: 6px;
+      background: var(--surface-1);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      box-shadow: 0 10px 28px rgba(50, 40, 20, 0.18);
+    }
+
+    .shelf-more-panel[hidden] {
+      display: none;
+    }
+
+    .shelf-more-item {
+      width: 100%;
+      padding: 9px 14px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      font: inherit;
+      font-size: var(--text-sm);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .shelf-more-item:hover {
+      background: var(--surface-2);
+      color: var(--text-primary);
+    }
+
+    .shelf-more-item:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+
+    /* 多选模式下藏起筛选与搜索入口，避免和勾选操作互相干扰；
+       退出多选时 dataset 切回去，这里自动恢复。 */
+    body[data-shelf-mode="select"] .shelf-filter-wrap,
+    body[data-shelf-mode="select"] #shelf-search-bar,
+    body[data-shelf-mode="select"] #shelf-search-toggle {
+      display: none;
+    }
+
+    /* 多选模式底部操作条：取消 / 计数 / 删除。
+       显隐跟 data-shelf-mode 走，不用 hidden 属性（display:flex 会覆盖它）。 */
+    .shelf-actionbar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+      background: var(--surface-1);
+      border-top: 1px solid var(--border-subtle);
+      z-index: 30; /* 高于目录面板的 20 */
+    }
+
+    body[data-shelf-mode="select"] .shelf-actionbar {
+      display: flex;
+    }
+
+    .shelf-actionbar-count {
+      flex: 1;
+      text-align: center;
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+    }
+
+    .btn-ghost {
+      padding: 8px 18px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-primary);
+      font: inherit;
+      font-size: var(--text-sm);
+      cursor: pointer;
+    }
+
+    .btn-ghost:hover {
+      background: var(--surface-2);
+    }
+
+    .btn-ghost:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+
+    /* 主题里没有红色系变量，按任务说明用 #d9534f。 */
+    .btn-danger {
+      background: #d9534f;
+      color: #fff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: var(--radius-sm);
+      font-size: var(--text-sm);
+      cursor: pointer;
+    }
+
+    .btn-danger:hover {
+      background: #c9433f;
+    }
+
+    .btn-danger:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+
+    /* 0 本时点不动、看着是灰的：原色加透明度，不再造一个灰色变量。 */
+    .btn-danger:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    /* 多选模式的布局避让：
+       右下角存储占用被操作条盖住没意义，藏掉；
+       书架底部留出操作条的高度，最后一行卡片别被压住。 */
+    body[data-shelf-mode="select"] .storage-usage {
+      display: none;
+    }
+
+    body[data-shelf-mode="select"] #shelf {
+      padding-bottom: 72px;
+    }
+
+    /* 删除确认弹窗：颜色全部走现有变量，夜间模式自动一致。 */
+    dialog {
+      background: var(--surface-1);
+      color: var(--text-primary);
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 20px;
+      max-width: 400px;
+      width: calc(100% - 32px);
+    }
+
+    dialog::backdrop {
+      background: rgba(0, 0, 0, 0.45);
+    }
+
+    dialog h2 {
+      margin: 0 0 var(--space-3);
+      font-size: var(--text-lg);
+      color: var(--text-primary);
+    }
+
+    dialog p {
+      margin: 0 0 var(--space-4);
+      font-size: var(--text-sm);
+      line-height: var(--leading-normal);
+      color: var(--text-secondary);
+      overflow-wrap: anywhere;
+    }
+
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--space-2);
+    }
+
     /* 搜索展开态的输入框：下划线样式（对齐设计稿），大字号。 */
     .shelf-search {
       flex: 1;
@@ -574,6 +746,66 @@
       padding-bottom: 26px;
     }
 
+    /* ---- 多选模式的视觉反馈 ----
+       勾选框：纯 CSS 画（选中态用 ::after 画对勾），不用图片和 SVG。
+       手机端进度环在右下角（bottom 4px），勾选框在右上角（top 6px），互不冲突。 */
+    .shelf-check {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      border: 2px solid rgba(255, 255, 255, 0.92);
+      background: rgba(0, 0, 0, 0.3);
+      display: none;
+      z-index: 2;
+      pointer-events: none;
+      transition: background 0.12s, border-color 0.12s;
+    }
+
+    /* 只在多选模式出现 */
+    body[data-shelf-mode="select"] .shelf-item .shelf-check {
+      display: block;
+    }
+
+    /* 选中的：勾选框填充主题色并画对勾 */
+    .shelf-item[data-selected="true"] .shelf-check {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .shelf-item[data-selected="true"] .shelf-check::after {
+      content: "";
+      position: absolute;
+      left: 6px;
+      top: 2px;
+      width: 6px;
+      height: 11px;
+      border: solid #fff;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+
+    /* 未选中的卡片整体压暗；选中的撤销压暗并加主题色描边。
+       .shelf-item 之前没占用任何伪元素，压暗遮罩用 ::after 不会覆盖现有样式。 */
+    body[data-shelf-mode="select"] .shelf-item::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.3);
+      pointer-events: none;
+      transition: opacity 0.12s;
+    }
+
+    body[data-shelf-mode="select"] .shelf-item[data-selected="true"]::after {
+      opacity: 0;
+    }
+
+    body[data-shelf-mode="select"] .shelf-item[data-selected="true"] {
+      box-shadow: 0 0 0 2px var(--accent);
+    }
+
     .shelf-title {
       margin: 0;
       padding: 0;
@@ -667,46 +899,6 @@
       }
     }
 
-    .shelf-delete {
-      position: absolute;
-      top: 6px;
-      right: 6px;
-      z-index: 1; /* 盖在封面图上 */
-      min-width: 28px;
-      min-height: 24px;
-      padding: 2px var(--space-2);
-      border: 0;
-      border-radius: var(--radius-sm);
-      /* 封面网格里下面是图片，灰字加透明底会看不见，改成常显标签。 */
-      color: #fff;
-      background: rgba(0, 0, 0, 0.45);
-      font: inherit;
-      font-size: var(--text-xs);
-      cursor: pointer;
-      transition: opacity var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
-    }
-
-    .shelf-item:hover .shelf-delete,
-    .shelf-item:focus-within .shelf-delete {
-      background: rgba(0, 0, 0, 0.65);
-    }
-
-    .shelf-delete:hover {
-      background: rgba(0, 0, 0, 0.8);
-    }
-
-    .shelf-delete:focus-visible {
-      outline: 3px solid var(--focus-ring);
-      outline-offset: 2px;
-    }
-
-    /* 触屏没有 hover，删除按钮必须常亮 */
-    @media (hover: none) {
-      .shelf-delete {
-        opacity: 1;
-      }
-    }
-
     .shelf-empty {
       margin: 0;
       padding: var(--space-5) var(--space-4);
@@ -716,6 +908,23 @@
       font-size: var(--text-sm);
       line-height: var(--leading-normal);
       text-align: center;
+    }
+
+    /* 筛选空状态：有书但当前分组/搜索没有结果。
+       基础样式先跟 .shelf-empty 保持一致，后面分别细化。 */
+    .shelf-filter-empty {
+      margin: 0;
+      padding: var(--space-5) var(--space-4);
+      border: 1px dashed var(--border-subtle);
+      border-radius: var(--radius-md);
+      color: var(--text-muted);
+      font-size: var(--text-sm);
+      line-height: var(--leading-normal);
+      text-align: center;
+    }
+
+    .shelf-filter-empty .btn-ghost {
+      margin-left: var(--space-2);
     }
 
     /* 目录面板：默认滑出屏幕外，靠 .is-open 滑入。
@@ -846,6 +1055,21 @@
        不显式声明的话导航条会一直占着高度露在书架上。 */
     .chapter-nav[hidden] {
       display: none;
+    }
+
+    /* 阅读视图专用控件组：目录 / 字号 / 夜间模式。
+       书架字号是固定的（--text-xs / --text-sm），在书架上调了看不到效果，
+       所以这一组只在阅读视图显示。margin-left:auto 把它推到工具栏右侧。 */
+    .reader-tools {
+      display: none;
+      align-items: center;
+      gap: var(--space-3);
+      margin-left: auto;
+    }
+
+    /* 只在阅读视图出现 */
+    body[data-view="reader"] .reader-tools {
+      display: flex;
     }
 
     .chapter-nav-button {
@@ -988,22 +1212,28 @@
     >
       ← 书架
     </button>
-    <button id="toc-button" class="theme-button" type="button" hidden>目录</button>
-    <label class="font-size-control" for="font-size">
-      字号
-      <input
-        id="font-size"
-        class="font-size-slider"
-        type="range"
-        min="14"
-        max="28"
-        step="1"
-        value="18"
-      >
-    </label>
-    <button id="theme-toggle" class="theme-button" type="button">
-      切换夜间模式
-    </button>
+
+    <!-- 阅读视图专用控件：目录 / 字号 / 夜间模式。
+         书架字号是固定的（--text-xs / --text-sm），在这两个控件上
+         调了看不到效果，所以只在阅读视图显示。 -->
+    <div id="reader-tools" class="reader-tools">
+      <button id="toc-button" class="theme-button" type="button" hidden>目录</button>
+      <label class="font-size-control" for="font-size">
+        字号
+        <input
+          id="font-size"
+          class="font-size-slider"
+          type="range"
+          min="14"
+          max="28"
+          step="1"
+          value="18"
+        >
+      </label>
+      <button id="theme-toggle" class="theme-button" type="button">
+        切换夜间模式
+      </button>
+    </div>
   </div>
 
   <section id="shelf" class="shelf" aria-label="书架">
@@ -1059,18 +1289,31 @@
           </div>
         </div>
 
-        <button id="shelf-more" class="shelf-action" type="button" aria-label="更多">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
-            <circle cx="12" cy="5" r="2.2"></circle>
-            <circle cx="12" cy="12" r="2.2"></circle>
-            <circle cx="12" cy="19" r="2.2"></circle>
-          </svg>
-        </button>
+        <!-- 更多：漏斗同款弹出菜单，目前只有「删除书籍」一项（进多选模式） -->
+        <div class="shelf-more-wrap">
+          <button id="shelf-more" class="shelf-action" type="button"
+                  aria-label="更多" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
+              <circle cx="12" cy="5" r="2.2"></circle>
+              <circle cx="12" cy="12" r="2.2"></circle>
+              <circle cx="12" cy="19" r="2.2"></circle>
+            </svg>
+          </button>
+          <div id="shelf-more-panel" class="shelf-more-panel" hidden>
+            <button id="shelf-more-delete" class="shelf-more-item" type="button">删除书籍</button>
+          </div>
+        </div>
       </div>
     </div>
     <div id="shelf-list" class="shelf-list"></div>
+    <!-- 空状态一：真的一本书都没有 -->
     <p id="shelf-empty" class="shelf-empty" hidden>
       还没有书，点上面导入一本
+    </p>
+    <!-- 空状态二：有书但筛选结果为空，「查看全部」清掉筛选恢复完整书架 -->
+    <p id="shelf-filter-empty" class="shelf-filter-empty" hidden>
+      <span id="shelf-filter-empty-text"></span>
+      <button id="shelf-filter-clear" class="btn-ghost" type="button">查看全部</button>
     </p>
   </section>
 
@@ -1088,6 +1331,27 @@
     </div>
     <ol id="toc-list" class="toc-list"></ol>
   </aside>
+  <!-- 多选模式底部操作条：显隐完全由 data-shelf-mode 的 CSS 驱动，
+       不用 hidden 属性（display:flex 会覆盖它，两套机制会打架）。
+       删除经确认弹窗后批量执行。 -->
+  <div id="shelf-actionbar" class="shelf-actionbar">
+    <button id="shelf-select-cancel" class="btn-ghost" type="button">取消</button>
+    <span id="shelf-select-count" class="shelf-actionbar-count">已选 0 本</span>
+    <button id="shelf-select-delete" class="btn-danger" type="button" disabled>删除</button>
+  </div>
+
+  <!-- 删除确认弹窗：form method="dialog" 让按钮自动带 returnValue 关闭。
+       由 confirmDelete() 用 showModal() 打开。 -->
+  <dialog id="delete-dialog">
+    <form method="dialog">
+      <h2>删除书籍</h2>
+      <p id="delete-dialog-summary"></p>
+      <div class="dialog-actions">
+        <button value="cancel" class="btn-ghost">取消</button>
+        <button value="ok" class="btn-danger">删除</button>
+      </div>
+    </form>
+  </dialog>
   <div
     id="reading-toast"
     class="reading-toast"
@@ -1124,6 +1388,9 @@
     const nextChapter = document.getElementById("next-chapter");
     const shelfTabs = document.getElementById("shelf-tabs");
     const shelfSearch = document.getElementById("shelf-search");
+    const shelfFilterEmpty = document.getElementById("shelf-filter-empty");
+    const shelfFilterEmptyText = document.getElementById("shelf-filter-empty-text");
+    const shelfFilterClear = document.getElementById("shelf-filter-clear");
     const shelfControls = document.querySelector(".shelf-controls");
     const shelfSearchBar = document.getElementById("shelf-search-bar");
     const shelfSearchToggle = document.getElementById("shelf-search-toggle");
@@ -1131,6 +1398,11 @@
     const shelfFilterButton = document.getElementById("shelf-filter");
     const shelfFilterPanel = document.getElementById("shelf-filter-panel");
     const shelfMoreButton = document.getElementById("shelf-more");
+    const shelfMorePanel = document.getElementById("shelf-more-panel");
+    const shelfActionbar = document.getElementById("shelf-actionbar");
+    const shelfSelectCancel = document.getElementById("shelf-select-cancel");
+    const shelfSelectCount = document.getElementById("shelf-select-count");
+    const shelfSelectDelete = document.getElementById("shelf-select-delete");
     const root = document.documentElement;
     let currentBookKey = null;
     // 当前打开这本书的章节数组；epub 章节切换要用。
@@ -1153,6 +1425,12 @@
     // 书架筛选状态：分组 tab 和搜索框共用，统一走 renderShelf。
     let shelfFilter = { group: "all", keyword: "" };
     let shelfSearchTimer = null;
+    // 书架多选模式："browse" 正常浏览；"select" 点卡片只切换选中。
+    let shelfMode = "browse";
+    // 多选模式下被选中的书（bookKey 集合），勾选框视觉下一张卡再做。
+    const selectedKeys = new Set();
+    // 长按进多选后松手会跟一个 click，吞掉防止直接打开书。
+    let suppressClick = false;
     // 书架封面的 objectURL 不会自己释放，每次重建 DOM 前必须全部 revoke。
     let shelfCoverUrls = [];
     // 当前章节里图片的 objectURL，切章时要统一回收。
@@ -1682,9 +1960,28 @@
 
         releaseShelfCoverUrls();
         shelfList.replaceChildren();
-        // 空状态只看"有没有书"：搜不到结果时不能显示"还没有书"，
-        // 用户明明有书，只是没搜到。两种空状态要分开。
-        shelfEmpty.hidden = allMetas.length > 0;
+
+        // 两种空状态用不同元素，别靠改文案：
+        // 真没书（allMetas 为空）→ .shelf-empty；
+        // 有书但筛选/搜索没结果 → .shelf-filter-empty（带「查看全部」）。
+        const hasBooks = allMetas.length > 0;
+        const hasResults = metas.length > 0;
+
+        shelfEmpty.hidden = hasBooks;
+        shelfFilterEmpty.hidden = !hasBooks || hasResults;
+
+        // 筛选空状态的提示带当前分组名（全部 + 关键字搜不到时用另一句）。
+        if (!shelfFilterEmpty.hidden) {
+          const groupName =
+            shelfFilter.group === "reading"
+              ? "在读"
+              : shelfFilter.group === "unread"
+                ? "未读"
+                : "";
+          shelfFilterEmptyText.textContent = groupName
+            ? `「${groupName}」里还没有书`
+            : "没有找到匹配的书";
+        }
 
         for (const meta of metas) {
           // 书名是用户可控内容，必须使用 createElement + textContent，禁止 innerHTML 拼接，避免 XSS。
@@ -1696,7 +1993,10 @@
           // .shelf-chapter[hidden] 规则，否则 hidden 特性拦不住显示。
           chapterEl.className = "shelf-chapter";
           const caption = document.createElement("div");
-          const deleteButton = document.createElement("button");
+          // 多选模式的勾选框：纯 CSS 画（选中方加对勾），无障碍装饰。
+          const checkEl = document.createElement("span");
+          checkEl.className = "shelf-check";
+          checkEl.setAttribute("aria-hidden", "true");
           const pos = getSavedPos(meta.bookKey);
           const chapterCount = Number(meta.chapterCount) || 1;
           const charCount = Number(meta.chars) || 0;
@@ -1839,8 +2139,10 @@
             caption.classList.add("caption-solo");
           }
 
+          // 勾选框放最前（封面之下层级靠 z-index 保证），不影响其他元素。
+          item.prepend(checkEl);
           item.prepend(cover);
-          item.append(caption, ring, deleteButton);
+          item.append(caption, ring);
           item.dataset.bookKey = String(meta.bookKey ?? "");
           shelfList.append(item);
         }
@@ -1870,6 +2172,71 @@
       shelfFilterButton.setAttribute("aria-expanded", "false");
     }
 
+    // ---- 多选模式状态机 ----
+
+    // 进入多选。传 bookKey 表示由长按某本书触发，把这本先选上。
+    function enterSelectMode(bookKey) {
+      shelfMode = "select";
+      selectedKeys.clear();
+
+      if (bookKey) {
+        selectedKeys.add(bookKey);
+      }
+
+      // 筛选面板和搜索入口由下面的 data-shelf-mode 隐藏（退出自动恢复），
+      // 但面板的 hidden / aria 状态也要一并收掉，别留下半开状态。
+      closeFilterPanel();
+
+      // 同步到 body，CSS 按 data-shelf-mode 藏起筛选和搜索入口。
+      document.body.dataset.shelfMode = shelfMode;
+
+      // 长按选中的那本（如果传了）要立刻显示勾选。
+      syncSelection();
+    }
+
+    // 退出多选，恢复正常浏览。
+    function exitSelectMode() {
+      shelfMode = "browse";
+      selectedKeys.clear();
+      document.body.dataset.shelfMode = shelfMode;
+
+      // 清掉卡片上的选中标记（dataset），勾选框随 CSS 消失。
+      syncSelection();
+    }
+
+    // 把 selectedKeys 同步到卡片 DOM：有它的 bookKey 就标 data-selected。
+    // 只改 dataset，视觉交给 CSS。
+    function syncSelection() {
+      document.querySelectorAll(".shelf-item").forEach((item) => {
+        if (selectedKeys.has(item.dataset.bookKey)) {
+          item.dataset.selected = "true";
+        } else {
+          delete item.dataset.selected;
+        }
+      });
+
+      // 操作条计数跟着选中数走（0 本时删除按钮置灰）。
+      updateSelectCount();
+    }
+
+    // 底部操作条的计数 + 删除按钮可用性。
+    function updateSelectCount() {
+      const count = selectedKeys.size;
+
+      shelfSelectCount.textContent = `已选 ${count} 本`;
+      shelfSelectDelete.disabled = count === 0;
+    }
+
+    // 取消：退出多选，操作条随 data-shelf-mode 隐藏。
+    shelfSelectCancel.addEventListener("click", () => {
+      exitSelectMode();
+    });
+
+    // 删除：确认后批量删掉选中的书（上一张卡接真正删除）。
+    shelfSelectDelete.addEventListener("click", () => {
+      deleteSelectedBooks();
+    });
+
     async function setShelfGroup(group) {
       shelfFilter.group = group;
 
@@ -1885,6 +2252,29 @@
 
       await renderShelf();
     }
+
+    // 清掉分组和搜索关键字，恢复完整书架（筛选空状态的「查看全部」用）。
+    // tab 高亮也要复位，不然点了「查看全部」高亮还停在「在读」上。
+    function clearShelfFilter() {
+      shelfFilter.group = "all";
+      shelfFilter.keyword = "";
+      shelfSearch.value = "";
+
+      shelfTabs.querySelectorAll(".shelf-tab").forEach((tab) => {
+        const on = tab.dataset.group === "all";
+        tab.classList.toggle("is-active", on);
+        tab.setAttribute("aria-selected", on ? "true" : "false");
+      });
+
+      // 漏斗颜色跟着复位（不再是筛选态）。
+      shelfFilterButton.classList.toggle("is-filtered", false);
+
+      renderShelf();
+    }
+
+    shelfFilterClear.addEventListener("click", () => {
+      clearShelfFilter();
+    });
 
     shelfTabs.addEventListener("click", (event) => {
       if (!(event.target instanceof Element)) {
@@ -1973,9 +2363,43 @@
       showToast("分类功能开发中");
     });
 
+    // ---- 更多菜单：目前只有「删除书籍」（进多选模式）一项 ----
+    function openMorePanel() {
+      shelfMorePanel.hidden = false;
+      shelfMoreButton.setAttribute("aria-expanded", "true");
+    }
+
+    function closeMorePanel() {
+      shelfMorePanel.hidden = true;
+      shelfMoreButton.setAttribute("aria-expanded", "false");
+    }
+
     shelfMoreButton.addEventListener("click", () => {
-      showToast("更多功能开发中");
+      if (shelfMorePanel.hidden) {
+        openMorePanel();
+      } else {
+        closeMorePanel();
+      }
     });
+
+    // 点菜单外面收起（和分类面板同一套行为）。
+    document.addEventListener("click", (event) => {
+      if (
+        !shelfMorePanel.hidden &&
+        event.target instanceof Element &&
+        !event.target.closest(".shelf-more-wrap")
+      ) {
+        closeMorePanel();
+      }
+    });
+
+    // 「删除书籍」：进多选模式，勾选和确认按钮后面两步再做。
+    document
+      .getElementById("shelf-more-delete")
+      .addEventListener("click", () => {
+        closeMorePanel();
+        enterSelectMode();
+      });
 
     async function openShelfBook(bookKey) {
       // 切换视图会隐藏正文并改变布局，必须在离开阅读视图前保存当前进度。
@@ -2122,31 +2546,97 @@
       }
     }
 
+    // ---- 删除：内核 + 确认弹窗 + 单本/批量外壳 ----
+
+    // 删除内核：只做清理，不弹确认、不调 renderShelf，出错就 throw。
+    // 一共 7 件事：4 个 IndexedDB store + 新旧两个进度 key + LAST_BOOK_KEY。
+    async function deleteOneBookCore(bookKey) {
+      await deleteBook(bookKey);
+
+      await deleteBookMeta(bookKey);
+      await deleteChapters(bookKey);
+      await deleteResources(bookKey);
+
+      // 新旧两种进度 key 都要清，否则删书后会留下孤儿进度。
+      removeSetting(getPosKey(bookKey));
+      removeSetting(getLegacyProgressKey(bookKey));
+
+      if (localStorage.getItem(LAST_BOOK_KEY) === bookKey) {
+        localStorage.removeItem(LAST_BOOK_KEY);
+      }
+    }
+
+    // 删除确认弹窗：names 是要删的书名数组。
+    // 返回 Promise<boolean>，用户点「删除」才 resolve(true)；Esc / 取消都是 false。
+    function confirmDelete(names) {
+      const shown = names.slice(0, 3).join("、");
+      document.getElementById("delete-dialog-summary").textContent =
+        names.length <= 3
+          ? `${shown}，正文和阅读进度都会没。`
+          : `${shown} 等 ${names.length} 本，正文和阅读进度都会没。`;
+
+      const dialog = document.getElementById("delete-dialog");
+      dialog.showModal(); // 必须用 showModal：有遮罩、锁焦点、响应 Esc
+
+      return new Promise((resolve) => {
+        dialog.addEventListener(
+          "close",
+          () => resolve(dialog.returnValue === "ok"),
+          { once: true }
+        );
+      });
+    }
+
+    // 单本删除外壳：确认 → 内核清理 → 重渲染一次。对外行为保持不变。
     async function deleteShelfBook(bookKey) {
-      if (!confirm("删掉这本书？正文和阅读进度都会没。")) {
+      const meta = (await getAllBookMeta()).find((m) => m.bookKey === bookKey);
+      const ok = await confirmDelete([meta?.name ?? bookKey]);
+
+      if (!ok) {
         return;
       }
 
       try {
-        await deleteBook(bookKey);
-
-        await deleteBookMeta(bookKey);
-        await deleteChapters(bookKey);
-        await deleteResources(bookKey);
-
-        // 新旧两种进度 key 都要清，否则删书后会留下孤儿进度。
-        removeSetting(getPosKey(bookKey));
-        removeSetting(getLegacyProgressKey(bookKey));
-
-        if (localStorage.getItem(LAST_BOOK_KEY) === bookKey) {
-          localStorage.removeItem(LAST_BOOK_KEY);
-        }
+        await deleteOneBookCore(bookKey);
       } catch (error) {
         console.error(error);
         showToast("删除失败，请稍后重试");
       } finally {
         await renderShelf();
       }
+    }
+
+    // 批量删除外壳：多选模式下删掉所有选中的书。
+    async function deleteSelectedBooks() {
+      if (selectedKeys.size === 0) {
+        return;
+      }
+
+      const metas = await getAllBookMeta();
+      const names = [...selectedKeys].map((key) => {
+        const meta = metas.find((m) => m.bookKey === key);
+        return meta?.name ?? key;
+      });
+
+      const ok = await confirmDelete(names);
+
+      // 取消后保留选中状态，用户可以继续勾选。
+      if (!ok) {
+        return;
+      }
+
+      const keys = [...selectedKeys];
+
+      // 必须串行：并发删多本时 IndexedDB 事务会互相排队，报错也难定位。
+      for (const key of keys) {
+        await deleteOneBookCore(key);
+      }
+
+      selectedKeys.clear();
+      exitSelectMode();
+
+      // 整个批量只重渲染一次；当前有筛选条件时 renderShelf 会重新应用。
+      await renderShelf();
     }
     
   function setReadingText(text) {
@@ -2337,6 +2827,12 @@
 
     // 书架条目由 renderShelf 动态创建，因此统一在列表上使用事件委托。
     shelfList.addEventListener("click", (event) => {
+      // 长按进多选后松手会跟一个 click，吞掉防止直接打开书。
+      if (suppressClick) {
+        suppressClick = false;
+        return;
+      }
+
       if (!(event.target instanceof Element)) {
         return;
       }
@@ -2349,16 +2845,28 @@
 
       const bookKey = item.dataset.bookKey;
 
-      if (bookKey) {
-        openShelfBook(bookKey);
+      if (!bookKey) {
+        return;
       }
+
+      // 多选模式下点卡片只切换选中（视觉反馈由 syncSelection 同步），不开书。
+      if (shelfMode === "select") {
+        if (selectedKeys.has(bookKey)) {
+          selectedKeys.delete(bookKey);
+        } else {
+          selectedKeys.add(bookKey);
+        }
+        syncSelection();
+        return;
+      }
+
+      openShelfBook(bookKey);
     });
 
     shelfList.addEventListener("keydown", (event) => {
       if (
         (event.key !== "Enter" && event.key !== " ") ||
-        !(event.target instanceof Element) ||
-        event.target.closest(".shelf-delete")
+        !(event.target instanceof Element)
       ) {
         return;
       }
@@ -2371,10 +2879,69 @@
 
       const bookKey = item.dataset.bookKey;
 
-      if (bookKey) {
-        event.preventDefault();
-        openShelfBook(bookKey);
+      if (!bookKey) {
+        return;
       }
+
+      // 多选模式下键盘激活等同点击：只切换选中，不开书。
+      if (shelfMode === "select") {
+        if (selectedKeys.has(bookKey)) {
+          selectedKeys.delete(bookKey);
+        } else {
+          selectedKeys.add(bookKey);
+        }
+        syncSelection();
+        event.preventDefault();
+        return;
+      }
+
+      event.preventDefault();
+      openShelfBook(bookKey);
+    });
+
+    // ---- 长按 550ms 进多选模式 ----
+    let longPressTimer = null;
+
+    shelfList.addEventListener("pointerdown", (event) => {
+      if (shelfMode !== "browse") {
+        return;
+      }
+
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const item = event.target.closest(".shelf-item");
+
+      if (!item || !item.dataset.bookKey) {
+        return;
+      }
+
+      const bookKey = item.dataset.bookKey;
+
+      longPressTimer = setTimeout(() => {
+        longPressTimer = null;
+        // 触发长按：标记吞掉随后的 click，再进入多选并把这本选上。
+        suppressClick = true;
+        enterSelectMode(bookKey);
+      }, 550);
+    });
+
+    // 松手 / 系统接管 / 手指移动（滚动）都会取消还没触发的长按。
+    function cancelLongPress() {
+      if (longPressTimer !== null) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    }
+
+    shelfList.addEventListener("pointerup", cancelLongPress);
+    shelfList.addEventListener("pointercancel", cancelLongPress);
+    shelfList.addEventListener("pointermove", cancelLongPress);
+
+    // 手机长按会弹系统菜单，拦截掉。
+    shelfList.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
     });
 
     // 找第一个有文字的章节；封面页、版权页这类只有图片的章节要跳过。
