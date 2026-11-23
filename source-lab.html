@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>书源规则调试台</title>
+  <style>
+    :root {
+      /* 跟 index.html 同一套令牌：米白底 + 深绿主色 */
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 24px;
+      --space-6: 32px;
+
+      --text-xs: 12px;
+      --text-sm: 13px;
+      --text-base: 15px;
+      --text-lg: 17px;
+      --text-xl: 22px;
+
+      --leading-tight: 1.35;
+      --leading-normal: 1.6;
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+
+      --dur-fast: 120ms;
+      --ease: cubic-bezier(.2,.7,.3,1);
+
+      --surface-0: #f5f2eb;
+      --surface-1: #fffdf9;
+      --surface-2: #efe9df;
+      --border-subtle: rgba(60,48,30,.12);
+      --border-strong: rgba(60,48,30,.22);
+
+      --text-primary: #292929;
+      --text-secondary: #6b6259;
+      --text-muted: #958c81;
+
+      --accent: #3f6f5e;
+      --accent-strong: #2f5b4c;
+      --accent-contrast: #ffffff;
+      --focus-ring: rgba(63,111,94,.35);
+
+      --danger: #d9534f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: var(--space-5) var(--space-4) var(--space-6);
+      color: var(--text-primary);
+      background: var(--surface-0);
+      font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: var(--text-base);
+      line-height: var(--leading-normal);
+    }
+
+    .wrap {
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 var(--space-2);
+      font-size: var(--text-xl);
+      line-height: var(--leading-tight);
+    }
+
+    .hint {
+      margin: 0 0 var(--space-5);
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+    }
+
+    /* 两栏：左 HTML、右规则。窄屏堆叠。 */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-4);
+      margin-bottom: var(--space-4);
+    }
+
+    @media (max-width: 720px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+
+    .field label {
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+      font-weight: 500;
+    }
+
+    textarea,
+    input[type="text"] {
+      width: 100%;
+      padding: var(--space-3);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--surface-1);
+      color: var(--text-primary);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: var(--text-sm);
+      line-height: var(--leading-normal);
+    }
+
+    textarea {
+      min-height: 260px;
+      resize: vertical;
+    }
+
+    textarea:focus,
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--focus-ring);
+    }
+
+    textarea::placeholder,
+    input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .run-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      margin-bottom: var(--space-4);
+      flex-wrap: wrap;
+    }
+
+    button {
+      min-height: 36px;
+      padding: var(--space-2) var(--space-4);
+      border: 0;
+      border-radius: var(--radius-sm);
+      font: inherit;
+      font-size: var(--text-sm);
+      cursor: pointer;
+      transition: background var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
+    }
+
+    button:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+
+    .btn-primary {
+      color: var(--accent-contrast);
+      background: var(--accent);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-strong);
+    }
+
+    .btn-ghost {
+      color: var(--text-secondary);
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .btn-ghost:hover {
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+      background: var(--surface-1);
+    }
+
+    /* 结果区 */
+    .results {
+      display: grid;
+      gap: var(--space-3);
+    }
+
+    .result-block {
+      padding: var(--space-4);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      background: var(--surface-1);
+    }
+
+    .result-head {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-2);
+      margin-bottom: var(--space-2);
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+      font-weight: 500;
+    }
+
+    .result-meta {
+      color: var(--text-muted);
+      font-size: var(--text-xs);
+      font-weight: 400;
+    }
+
+    .value-box {
+      margin: 0;
+      padding: var(--space-3);
+      border-radius: var(--radius-sm);
+      background: var(--surface-2);
+      color: var(--text-primary);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: var(--text-sm);
+      line-height: var(--leading-normal);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    /* 数组逐行：序号 + 值 */
+    .value-line {
+      display: flex;
+      gap: var(--space-2);
+    }
+
+    .value-index {
+      flex: none;
+      min-width: 2.4em;
+      color: var(--text-muted);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .value-text {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .type-tag {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-size: var(--text-xs);
+      font-weight: 500;
+    }
+
+    .type-string { color: var(--accent-strong); background: rgba(63,111,94,.12); }
+    .type-array  { color: #2f6bb0; background: rgba(43,108,176,.12); }
+    .type-null   { color: var(--text-muted); background: var(--surface-2); }
+    .type-other  { color: var(--text-secondary); background: var(--surface-2); }
+
+    .empty-tip {
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    .error-box {
+      margin: 0;
+      padding: var(--space-3);
+      border-radius: var(--radius-sm);
+      background: rgba(217,83,79,.08);
+      border: 1px solid rgba(217,83,79,.25);
+      color: var(--danger);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: var(--text-sm);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    /* 预设 */
+    .presets {
+      margin-top: var(--space-5);
+      padding-top: var(--space-4);
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .presets-title {
+      margin: 0 0 var(--space-3);
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+      font-weight: 500;
+    }
+
+    .preset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>书源规则调试台</h1>
+    <p class="hint">粘贴网页源码和规则，看能取到什么</p>
+
+    <div class="grid">
+      <div class="field">
+        <label for="html-input">网页 HTML</label>
+        <textarea id="html-input" placeholder="粘贴页面源码" spellcheck="false"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="rule-input">规则</label>
+        <input id="rule-input" type="text" placeholder="class.item.0@tag.a.0@text" spellcheck="false" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="run-row">
+      <button id="run-button" class="btn-primary" type="button">运行</button>
+    </div>
+
+    <div class="results">
+      <div class="result-block">
+        <div class="result-head">
+          取到的值
+          <span id="value-meta" class="result-meta"></span>
+        </div>
+        <pre id="value-box" class="value-box empty-tip">（还没有运行）</pre>
+      </div>
+
+      <div class="result-block">
+        <div class="result-head">类型</div>
+        <div id="type-box"><span class="type-tag type-null">未运行</span></div>
+      </div>
+
+      <div class="result-block">
+        <div class="result-head">耗时</div>
+        <div id="time-box" class="result-meta">—</div>
+      </div>
+    </div>
+
+    <div class="presets">
+      <p class="presets-title">预设示例</p>
+      <div class="preset-row">
+        <button class="btn-ghost" type="button" data-preset="first-title">取第一个书名</button>
+        <button class="btn-ghost" type="button" data-preset="all-links">取全部链接</button>
+        <button class="btn-ghost" type="button" data-preset="list-subrule">列表 + 子规则</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="booksource.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      const htmlInput = document.getElementById("html-input");
+      const ruleInput = document.getElementById("rule-input");
+      const runButton = document.getElementById("run-button");
+      const valueBox = document.getElementById("value-box");
+      const valueMeta = document.getElementById("value-meta");
+      const typeBox = document.getElementById("type-box");
+      const timeBox = document.getElementById("time-box");
+
+      // 预设用的示例 HTML，跟 booksource.js 自测一致
+      const SAMPLE_HTML = [
+        '<div class="item"><a href="/b/1">第一本</a><span class="au">作者甲</span></div>',
+        '<div class="item"><a href="/b/2">第二本</a><span class="au">作者乙</span></div>',
+        '<div class="item"><a href="/b/3">第三本</a><span class="au">作者丙</span></div>',
+      ].join("\n");
+
+      // 预设：三个按钮分别演示单值、列表、列表+子规则
+      const PRESETS = {
+        "first-title": {
+          html: SAMPLE_HTML,
+          rule: "class.item.0@tag.a.0@text",
+        },
+        "all-links": {
+          html: SAMPLE_HTML,
+          rule: "class.item@tag.a.0@href",
+        },
+        "list-subrule": {
+          html: SAMPLE_HTML,
+          // 用 | 把「书名」和「作者」两条子规则合并展示 bsEvalList 的用法
+          rule: "class.item@tag.a.0@text",
+          useList: true,
+          listRule: "class.item",
+          itemRule: "tag.a.0@text",
+        },
+      };
+
+      // 渲染结果：数组逐行带序号，其它按字符串处理
+      function renderValue(value) {
+        valueBox.classList.remove("empty-tip");
+        valueBox.replaceChildren();
+
+        if (value === null) {
+          valueBox.classList.add("empty-tip");
+          valueBox.textContent = "（null：没匹配到，或规则非法）";
+          valueMeta.textContent = "";
+          return;
+        }
+
+        if (Array.isArray(value)) {
+          valueMeta.textContent = "共 " + value.length + " 项";
+
+          if (value.length === 0) {
+            valueBox.classList.add("empty-tip");
+            valueBox.textContent = "（空数组）";
+            return;
+          }
+
+          value.forEach((item, index) => {
+            const line = document.createElement("div");
+            line.className = "value-line";
+
+            const num = document.createElement("span");
+            num.className = "value-index";
+            num.textContent = "[" + index + "]";
+
+            const text = document.createElement("span");
+            text.className = "value-text";
+            text.textContent = typeof item === "string" ? item : String(item);
+
+            line.append(num, text);
+            valueBox.append(line);
+          });
+
+          return;
+        }
+
+        // 元素对象（规则最后一段不是取值器）就显示标签名
+        if (value instanceof Element) {
+          valueMeta.textContent = "元素";
+          valueBox.textContent = "<" + value.tagName.toLowerCase() + "> " + value.outerHTML.slice(0, 200);
+          return;
+        }
+
+        valueMeta.textContent = "";
+        valueBox.textContent = String(value);
+      }
+
+      // 类型标签：string / array / null / 其它
+      function renderType(value) {
+        typeBox.replaceChildren();
+
+        const tag = document.createElement("span");
+        let label;
+        let cls;
+
+        if (value === null) {
+          label = "null";
+          cls = "type-null";
+        } else if (Array.isArray(value)) {
+          label = "array（" + value.length + " 项）";
+          cls = "type-array";
+        } else if (typeof value === "string") {
+          label = "string";
+          cls = "type-string";
+        } else if (value instanceof Element) {
+          label = "element";
+          cls = "type-other";
+        } else {
+          label = typeof value;
+          cls = "type-other";
+        }
+
+        tag.className = "type-tag " + cls;
+        tag.textContent = label;
+        typeBox.append(tag);
+      }
+
+      // 运行一次求值，计时用 performance.now()
+      function run() {
+        const html = htmlInput.value;
+        const rule = ruleInput.value.trim();
+        const preset = currentPreset;
+
+        valueBox.classList.remove("empty-tip");
+        valueMeta.textContent = "";
+        typeBox.replaceChildren();
+        timeBox.textContent = "—";
+
+        if (!html.trim()) {
+          valueBox.classList.add("empty-tip");
+          valueBox.textContent = "（请先粘贴网页 HTML）";
+          renderType(null);
+          return;
+        }
+
+        if (!rule) {
+          valueBox.classList.add("empty-tip");
+          valueBox.textContent = "（请输入规则）";
+          renderType(null);
+          return;
+        }
+
+        try {
+          const start = performance.now();
+
+          let value;
+
+          // 「列表 + 子规则」预设走 bsEvalList，其余走 bsEvalRule
+          if (preset && preset.useList) {
+            const doc = bsParseHtml(html);
+            value = doc ? bsEvalList(preset.listRule, preset.itemRule, doc) : null;
+          } else {
+            const doc = bsParseHtml(html);
+            value = doc ? bsEvalRule(rule, doc) : null;
+          }
+
+          const elapsed = performance.now() - start;
+
+          renderValue(value);
+          renderType(value);
+          timeBox.textContent = elapsed.toFixed(2) + " ms";
+        } catch (error) {
+          valueBox.classList.remove("empty-tip");
+          valueBox.replaceChildren();
+
+          const box = document.createElement("p");
+          box.className = "error-box";
+          box.textContent = error.name + ": " + error.message;
+          valueBox.append(box);
+
+          renderType(null);
+          timeBox.textContent = "—";
+        }
+      }
+
+      // 记住当前预设（只有「列表 + 子规则」需要走不同函数）
+      let currentPreset = null;
+
+      // 点预设：填好 HTML 和规则，并自动跑一次
+      document.querySelectorAll("[data-preset]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const preset = PRESETS[button.dataset.preset];
+
+          if (!preset) {
+            return;
+          }
+
+          currentPreset = preset;
+          htmlInput.value = preset.html;
+          ruleInput.value = preset.rule;
+          run();
+        });
+      });
+
+      // 手动改规则后不再沿用预设的特殊行为
+      ruleInput.addEventListener("input", () => {
+        currentPreset = null;
+      });
+
+      runButton.addEventListener("click", () => {
+        run();
+      });
+
+      // 规则框里回车直接跑
+      ruleInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          run();
+        }
+      });
+
+      // 首次进来填好示例，方便直接点运行
+      htmlInput.value = SAMPLE_HTML;
+      ruleInput.value = "class.item.0@tag.a.0@text";
+    })();
+  </script>
+</body>
+</html>

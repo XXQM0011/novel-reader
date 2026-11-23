@@ -789,6 +789,36 @@
       transform: rotate(45deg);
     }
 
+    /* 左上角章数角标：未读显示总章数，在读显示剩余，读完显示「完」。
+       蓝色取主题 accent 的冷色近似值（主题里没有现成的蓝）。 */
+    .shelf-badge {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      min-width: 22px;
+      padding: 1px 6px;
+      border-radius: 11px;
+      background: rgba(43, 108, 176, 0.92);
+      color: #fff;
+      font-size: 11px;
+      line-height: 18px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* 读完的书：角标压成中性黑，跟蓝色区分开。 */
+    .shelf-badge.is-finished {
+      background: rgba(0, 0, 0, 0.55);
+    }
+
+    /* 单章书不显示角标。position:absolute 不会自动隐藏 hidden 元素，
+       必须显式声明。 */
+    .shelf-badge[hidden] {
+      display: none;
+    }
+
     /* 未选中的卡片整体压暗；选中的撤销压暗并加主题色描边。
        .shelf-item 之前没占用任何伪元素，压暗遮罩用 ::after 不会覆盖现有样式。 */
     body[data-shelf-mode="select"] .shelf-item::after {
@@ -1823,18 +1853,94 @@
       readingContent.removeAttribute("aria-busy");
     }
 
-    async function updateStorageUsage() {
-      if (!navigator.storage?.estimate) {
-        return;
+    // 统计 IndexedDB 里实际存了多少字节。
+    // 为什么不用 navigator.storage.estimate()：
+    // WebKit（iPad Safari）返回的是数据库文件在磁盘上的大小，删掉记录后
+    // 文件不会立刻收缩，所以删完书刷新仍显示原来的占用。自己遍历一遍
+    // 才是「当前真实数据量」，各浏览器行为一致。
+    async function measureStoredBytes() {
+      const db = await openDB();
+
+      // 估算单条 value 的字节数：Blob/ArrayBuffer 取真实长度，
+      // 其它（字符串、对象）按 JSON 序列化后的 UTF-16 长度粗算。
+      function sizeOf(value) {
+        if (!value) {
+          return 0;
+        }
+
+        if (value instanceof Blob) {
+          return value.size;
+        }
+
+        if (value instanceof ArrayBuffer) {
+          return value.byteLength;
+        }
+
+        if (ArrayBuffer.isView(value)) {
+          return value.byteLength;
+        }
+
+        if (typeof value === "string") {
+          return value.length * 2;
+        }
+
+        try {
+          return JSON.stringify(value).length * 2;
+        } catch {
+          return 0;
+        }
       }
 
+      const sumStore = (storeName) =>
+        new Promise((resolve) => {
+          try {
+            const transaction = db.transaction(storeName, "readonly");
+            const request = transaction.objectStore(storeName).getAll();
+
+            request.onsuccess = () => {
+              const total = (request.result ?? []).reduce(
+                (sum, value) => sum + sizeOf(value),
+                0
+              );
+              resolve(total);
+            };
+            request.onerror = () => resolve(0);
+          } catch {
+            resolve(0);
+          }
+        });
+
+      const total =
+        (await sumStore(BOOK_STORE)) +
+        (await sumStore(META_STORE)) +
+        (await sumStore(CHAPTER_STORE)) +
+        (await sumStore(RESOURCE_STORE));
+
+      return total;
+    }
+
+    async function updateStorageUsage() {
       try {
-        const { usage, quota } = await navigator.storage.estimate();
-        const usedMB = (Number(usage) || 0) / (1024 * 1024);
-        const quotaGB = (Number(quota) || 0) / (1024 * 1024 * 1024);
+        // 实际数据量：删书后立刻反映出来（各浏览器一致）。
+        const storedBytes = await measureStoredBytes();
+        const usedMB = storedBytes / (1024 * 1024);
+
+        // 配额仍用浏览器给的（这个值不会因为删除而失真）。
+        let quotaGB = null;
+
+        if (navigator.storage?.estimate) {
+          try {
+            const { quota } = await navigator.storage.estimate();
+            quotaGB = (Number(quota) || 0) / (1024 * 1024 * 1024);
+          } catch {
+            quotaGB = null;
+          }
+        }
 
         storageUsage.textContent =
-          `已用 ${usedMB.toFixed(2)} MB · 上限 ${quotaGB.toFixed(2)}GB`;
+          quotaGB === null
+            ? `已用 ${usedMB.toFixed(2)} MB`
+            : `已用 ${usedMB.toFixed(2)} MB · 上限 ${quotaGB.toFixed(2)}GB`;
         storageUsage.hidden = false;
       } catch (error) {
         console.error(error);
@@ -2013,9 +2119,35 @@
           const checkEl = document.createElement("span");
           checkEl.className = "shelf-check";
           checkEl.setAttribute("aria-hidden", "true");
+          // 左上角章数角标：未读显示总章数，在读显示剩余章数，读完显示「完」。
+          const badgeEl = document.createElement("span");
+          badgeEl.className = "shelf-badge";
           const pos = getSavedPos(meta.bookKey);
           const chapterCount = Number(meta.chapterCount) || 1;
           const charCount = Number(meta.chars) || 0;
+
+          // 单章书（txt）不显示角标，跟章节行同一个判断。
+          // pos.chapter 是 0-based，剩余 = 总数 - 当前索引 - 1。
+          if (chapterCount > 1) {
+            let badgeText = "";
+
+            if (!pos) {
+              badgeText = String(chapterCount);
+            } else {
+              const remaining = Math.max(0, chapterCount - pos.chapter - 1);
+
+              if (remaining > 0) {
+                badgeText = String(remaining);
+              } else {
+                badgeText = "完";
+                badgeEl.classList.add("is-finished");
+              }
+            }
+
+            badgeEl.textContent = badgeText;
+          } else {
+            badgeEl.hidden = true;
+          }
 
           item.className = "shelf-item";
           item.tabIndex = 0;
@@ -2158,7 +2290,7 @@
           // 勾选框放最前（封面之下层级靠 z-index 保证），不影响其他元素。
           item.prepend(checkEl);
           item.prepend(cover);
-          item.append(caption, ring);
+          item.append(badgeEl, caption, ring);
           item.dataset.bookKey = String(meta.bookKey ?? "");
           shelfList.append(item);
         }
@@ -2374,11 +2506,6 @@
       }
     });
 
-    // ---- 分类 / 更多：占位按钮，功能后续接入 ----
-    shelfFilterButton.addEventListener("click", () => {
-      showToast("分类功能开发中");
-    });
-
     // ---- 更多菜单：目前只有「删除书籍」（进多选模式）一项 ----
     function openMorePanel() {
       shelfMorePanel.hidden = false;
@@ -2580,6 +2707,9 @@
       if (localStorage.getItem(LAST_BOOK_KEY) === bookKey) {
         localStorage.removeItem(LAST_BOOK_KEY);
       }
+
+      // 删完立刻刷新右下角占用显示，否则界面上还挂着删之前的大小。
+      await updateStorageUsage();
     }
 
     // 删除确认弹窗：names 是要删的书名数组。
@@ -3092,12 +3222,19 @@
     });
 
     document.addEventListener("keydown", (event) => {
-      // 只在面板真的打开时响应 Esc。
-      if (event.key !== "Escape" || !tocPanel.classList.contains("is-open")) {
+      if (event.key !== "Escape") {
         return;
       }
 
-      closeTocPanel();
+      // 目录面板（右侧滑出）和分类面板（漏斗弹层）都可能开着，一起处理。
+      // 只在各自真的打开时响应，避免误关。
+      if (tocPanel.classList.contains("is-open")) {
+        closeTocPanel();
+      }
+
+      if (!shelfFilterPanel.hidden) {
+        closeFilterPanel();
+      }
     });
 
     backToShelf.addEventListener("click", () => {
@@ -3837,5 +3974,6 @@
 
     initializeReader();
   </script>
+  <script src="booksource.js"></script>
 </body>
 </html>
